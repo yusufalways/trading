@@ -22,6 +22,7 @@ import os
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 import time
+import ta
 
 class MasterSwingAnalyzer:
     """
@@ -166,182 +167,97 @@ class MasterSwingAnalyzer:
     
     def _calculate_technical_indicators(self, df: pd.DataFrame) -> Dict:
         """
-        Professional technical analysis - FIXES CONTRADICTORY SIGNALS
-        
-        This addresses the user feedback about RSI 44.5 being marked as "Neutral"
-        when it should be in oversold territory.
+        Professional-grade technical analysis.
+        This function implements all feedback from the user to fix contradictions
+        and add comprehensive indicators.
         """
+        # Add all indicators from the 'ta' library to the DataFrame
+        df = ta.add_all_ta_features(
+            df, open="Open", high="High", low="Low", close="Close", volume="Volume", fillna=True
+        )
+
         current_price = df['Close'].iloc[-1]
         
-        # RSI Calculation - PROPER INTERPRETATION
-        rsi_values = talib.RSI(df['Close'].values, timeperiod=self.rsi_period)
-        current_rsi = rsi_values[-1]
-        
-        # RSI Interpretation - FIXES THE CONTRADICTION
+        # --- RSI Analysis (Fixed Contradiction) ---
+        current_rsi = df['momentum_rsi'].iloc[-1]
         if current_rsi <= 30:
             rsi_status = "Oversold"
-            rsi_signal = "BUY_OPPORTUNITY"
-            rsi_description = f"RSI {current_rsi:.1f} - Strong oversold, bounce expected"
+            rsi_interpretation = "Strong oversold, potential bounce"
         elif 30 < current_rsi <= 45:
-            rsi_status = "Oversold Territory"  # FIXES: 44.5 should be here, not neutral
-            rsi_signal = "POTENTIAL_BUY"
-            rsi_description = f"RSI {current_rsi:.1f} - In oversold territory, good for swing entry"
+            rsi_status = "Oversold Territory"
+            rsi_interpretation = "Entering oversold zone, potential swing entry"
         elif 45 < current_rsi <= 55:
             rsi_status = "Neutral"
-            rsi_signal = "HOLD"
-            rsi_description = f"RSI {current_rsi:.1f} - Neutral zone, wait for direction"
+            rsi_interpretation = "Neutral momentum, wait for confirmation"
         elif 55 < current_rsi <= 70:
             rsi_status = "Overbought Territory"
-            rsi_signal = "CAUTION"
-            rsi_description = f"RSI {current_rsi:.1f} - Approaching overbought, watch for reversal"
-        else:  # > 70
+            rsi_interpretation = "Entering overbought zone, caution advised"
+        else:
             rsi_status = "Overbought"
-            rsi_signal = "SELL_WARNING"
-            rsi_description = f"RSI {current_rsi:.1f} - Overbought, consider taking profits"
-        
-        # MACD Calculation - PROPER CROSSOVER DETECTION
-        macd_line, macd_signal_line, macd_histogram = talib.MACD(
-            df['Close'].values, 
-            fastperiod=self.macd_fast,
-            slowperiod=self.macd_slow, 
-            signalperiod=self.macd_signal
-        )
-        
-        current_macd = macd_line[-1]
-        current_signal = macd_signal_line[-1]
-        current_histogram = macd_histogram[-1]
-        prev_histogram = macd_histogram[-2]
-        
-        # MACD Interpretation - NO MORE CONTRADICTIONS
-        if current_macd > current_signal:
-            if current_histogram > prev_histogram:
-                macd_status = "Bullish Strengthening"
-                macd_signal = "BUY"
-                macd_description = "MACD above signal line with increasing momentum"
-            else:
-                macd_status = "Bullish Weakening"
-                macd_signal = "HOLD"
-                macd_description = "MACD above signal but momentum decreasing"
+            rsi_interpretation = "Strong overbought, potential reversal"
+
+        # --- MACD Analysis (Fixed Contradiction) ---
+        macd_diff = df['trend_macd_diff'].iloc[-1]
+        if macd_diff > 0 and df['trend_macd_diff'].iloc[-2] < 0:
+            macd_status = "Bullish Crossover"
+        elif macd_diff < 0 and df['trend_macd_diff'].iloc[-2] > 0:
+            macd_status = "Bearish Crossover"
+        elif macd_diff > 0:
+            macd_status = "Bullish"
         else:
-            if current_histogram < prev_histogram:
-                macd_status = "Bearish Strengthening"
-                macd_signal = "SELL"
-                macd_description = "MACD below signal line with increasing bearish momentum"
-            else:
-                macd_status = "Bearish Weakening"
-                macd_signal = "HOLD"
-                macd_description = "MACD below signal but bearish momentum decreasing"
-        
-        # ADX - Trend Strength (ADDRESSES MISSING TREND ANALYSIS)
-        adx_values = talib.ADX(df['High'].values, df['Low'].values, df['Close'].values, timeperiod=self.adx_period)
-        current_adx = adx_values[-1]
-        
-        if current_adx > 50:
-            trend_strength = "Very Strong"
-        elif current_adx > 30:
-            trend_strength = "Strong"
-        elif current_adx > 20:
-            trend_strength = "Moderate"
+            macd_status = "Bearish"
+
+        # --- Moving Average Analysis (Fixed Contradiction) ---
+        sma_20 = df['trend_sma_fast'].iloc[-1]
+        sma_50 = df['trend_sma_slow'].iloc[-1]
+        if current_price > sma_20 and current_price > sma_50 and sma_20 > sma_50:
+            ma_status = "Strong Bullish Trend"
+        elif current_price < sma_20 and current_price < sma_50 and sma_20 < sma_50:
+            ma_status = "Strong Bearish Trend"
+        elif current_price > sma_20 and current_price > sma_50:
+            ma_status = "Bullish"
         else:
-            trend_strength = "Weak"
-        
-        # Moving Averages - ACCURATE POSITION DETECTION
-        sma_20 = df['Close'].rolling(20).mean().iloc[-1]
-        sma_50 = df['Close'].rolling(50).mean().iloc[-1]
-        
-        # Price vs MA Analysis - FIXES CONTRADICTION
-        if current_price > sma_20 > sma_50:
-            ma_status = "Above Both MAs"
-            ma_signal = "BULLISH"
-        elif current_price > sma_20 and sma_20 < sma_50:
-            ma_status = "Above 20MA, Below 50MA"
-            ma_signal = "MIXED"
-        elif current_price < sma_20 < sma_50:
-            ma_status = "Below Both MAs"  # FIXES: This is what it should say
-            ma_signal = "BEARISH"
+            ma_status = "Bearish"
+
+        # --- ADX Trend Strength ---
+        current_adx = df['trend_adx'].iloc[-1]
+        if current_adx > 40:
+            trend_strength = "Very Strong Trend"
+        elif current_adx > 25:
+            trend_strength = "Strong Trend"
         else:
-            ma_status = "Mixed Signals"
-            ma_signal = "NEUTRAL"
-        
-        # Volume Analysis - PROFESSIONAL APPROACH
-        volume_sma = df['Volume'].rolling(20).mean()
-        current_volume = df['Volume'].iloc[-1]
-        avg_volume = volume_sma.iloc[-1]
-        volume_ratio = current_volume / avg_volume
-        
-        if volume_ratio > 2.0:
-            volume_status = "Very High"
-            volume_signal = "STRONG_CONFIRMATION"
-        elif volume_ratio > 1.5:
-            volume_status = "High"
-            volume_signal = "CONFIRMATION"
-        elif volume_ratio > 0.8:
-            volume_status = "Normal"
-            volume_signal = "NEUTRAL"
+            trend_strength = "Weak or No Trend"
+
+        # --- Volume Profile Analysis ---
+        obv_slope = talib.LINEARREG_SLOPE(df['volume_obv'], timeperiod=10)[-1]
+        if obv_slope > 0:
+            volume_trend = "Accumulation"
         else:
-            volume_status = "Low"
-            volume_signal = "WEAK_CONFIRMATION"
-        
-        # Support/Resistance Levels
-        high_20 = df['High'].rolling(20).max().iloc[-1]
-        low_20 = df['Low'].rolling(20).min().iloc[-1]
-        
-        support_level = low_20
-        resistance_level = high_20
-        
-        # Create multiple support/resistance levels for dashboard
-        support_levels = [
-            support_level,
-            support_level * 0.98,  # Secondary support
-            support_level * 0.95   # Strong support
-        ]
-        
-        resistance_levels = [
-            resistance_level,
-            resistance_level * 1.02,  # Secondary resistance
-            resistance_level * 1.05   # Strong resistance
-        ]
-        
+            volume_trend = "Distribution"
+
+        # --- Support & Resistance ---
+        support_level = df['Low'].rolling(30).min().iloc[-1]
+        resistance_level = df['High'].rolling(30).max().iloc[-1]
+
         return {
             'current_price': current_price,
-            'rsi': {
-                'value': current_rsi,
-                'status': rsi_status,
-                'signal': rsi_signal,
-                'description': rsi_description
-            },
-            'macd': {
-                'value': current_macd,
-                'signal_line': current_signal,
-                'histogram': current_histogram,
-                'status': macd_status,
-                'signal': macd_signal,
-                'description': macd_description
-            },
-            'adx': {
-                'value': current_adx,
-                'trend_strength': trend_strength,
-                'interpretation': trend_strength
-            },
-            'moving_averages': {
-                'sma_20': sma_20,
-                'sma_50': sma_50,
-                'price_vs_ma': ma_status,
-                'signal': ma_signal
-            },
+            'rsi': {'value': current_rsi, 'status': rsi_status, 'interpretation': rsi_interpretation},
+            'macd': {'diff': macd_diff, 'status': macd_status},
+            'moving_averages': {'sma_20': sma_20, 'sma_50': sma_50, 'status': ma_status},
+            'adx': {'value': current_adx, 'trend_strength': trend_strength},
+            'stochastic_rsi': {'value': df['momentum_stoch_rsi'].iloc[-1]},
+            'williams_r': {'value': df['momentum_wr'].iloc[-1]},
             'volume_analysis': {
-                'current_volume': current_volume,
-                'avg_volume': avg_volume,
-                'volume_ratio': volume_ratio,
-                'status': volume_status,
-                'signal': volume_signal
+                'obv_trend': volume_trend,
+                'vwap': df['volume_vwap'].iloc[-1]
+            },
+            'volatility': {
+                'atr': df['volatility_atr'].iloc[-1],
+                'bb_width': df['volatility_bbw'].iloc[-1]
             },
             'support_resistance': {
                 'support': support_level,
-                'resistance': resistance_level,
-                'support_levels': support_levels,
-                'resistance_levels': resistance_levels,
-                'position': 'MIDDLE' if support_level < current_price < resistance_level else 'EDGE'
+                'resistance': resistance_level
             }
         }
     
