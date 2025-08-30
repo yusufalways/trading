@@ -904,17 +904,47 @@ def show_live_signals(dashboard, selected_market):
         stock_symbols = [f"{opp['symbol']} ({opp['market_name']}) - Score: {opp['swing_score']}" for opp in all_opportunities]
         
         if is_mobile():
-            # Mobile layout - stack controls vertically
+            # Mobile layout - use selectbox for better scrolling experience
             st.markdown("🔍 **Select stocks for detailed analysis:**")
-            default_selection = stock_symbols[:3] if not st.session_state.selected_stocks_for_analysis else st.session_state.selected_stocks_for_analysis
             
-            selected_stocks = st.multiselect(
-                "Choose up to 5 stocks:",
-                stock_symbols,
-                default=[s for s in default_selection if s in stock_symbols],
-                help="Choose up to 5 stocks for comprehensive technical analysis",
-                key="detailed_analysis_selector"
+            # Show current selections
+            current_selections = st.session_state.selected_stocks_for_analysis if st.session_state.selected_stocks_for_analysis else []
+            
+            if current_selections:
+                st.markdown(f"**Selected ({len(current_selections)}):** {', '.join([s.split(' (')[0] for s in current_selections])}")
+                if st.button("Clear All Selections"):
+                    st.session_state.selected_stocks_for_analysis = []
+                    st.rerun()
+            
+            # Use selectbox for adding stocks (better for mobile)
+            stock_to_add = st.selectbox(
+                "Add a stock for analysis:",
+                [""] + [s for s in stock_symbols if s not in current_selections],
+                help="Select a stock to add to your analysis list"
             )
+            
+            if stock_to_add and stock_to_add not in current_selections:
+                if len(current_selections) < 5:
+                    current_selections.append(stock_to_add)
+                    st.session_state.selected_stocks_for_analysis = current_selections
+                    st.rerun()
+                else:
+                    st.warning("Maximum 5 stocks allowed for analysis")
+            
+            # Remove individual stocks
+            if current_selections:
+                stock_to_remove = st.selectbox(
+                    "Remove a stock:",
+                    [""] + current_selections,
+                    help="Select a stock to remove from analysis"
+                )
+                
+                if stock_to_remove:
+                    current_selections.remove(stock_to_remove)
+                    st.session_state.selected_stocks_for_analysis = current_selections
+                    st.rerun()
+            
+            selected_stocks = current_selections
             
             analysis_depth = st.selectbox(
                 "📊 Analysis Depth:",
@@ -928,8 +958,8 @@ def show_live_signals(dashboard, selected_market):
             col1, col2 = st.columns([2, 1])
             
             with col1:
-                # Use session state for persistence
-                default_selection = stock_symbols[:3] if not st.session_state.selected_stocks_for_analysis else st.session_state.selected_stocks_for_analysis
+                # No default selection - user must choose
+                default_selection = st.session_state.selected_stocks_for_analysis if st.session_state.selected_stocks_for_analysis else []
                 
                 selected_stocks = st.multiselect(
                     "🔍 Select stocks for detailed analysis:",
@@ -959,7 +989,7 @@ def show_live_signals(dashboard, selected_market):
             selected_stock = next(opp for opp in all_opportunities if opp['symbol'] == symbol)
             
             # Create detailed analysis section
-            with st.expander(f"📊 **{symbol}** - Detailed Technical Analysis", expanded=True):
+            with st.expander(f"📊 **{symbol}** - Detailed Technical Analysis", expanded=False):
                 
                 # Header with key metrics
                 score = selected_stock['swing_score']
@@ -980,59 +1010,77 @@ def show_live_signals(dashboard, selected_market):
                 score_color = "🟢" if score >= 80 else "🟡" if score >= 60 else "🔴"
                 signal_color = "🟢" if recommendation == "STRONG BUY" else "🟡"
                 
-                # Display metrics vertically with reduced spacing
+                # Display metrics vertically with minimal spacing
                 st.markdown(f"""
-                <div style="margin-bottom: -10px;">
-                    <h4 style="margin-bottom: 5px;">Swing Score</h4>
-                    <p style="font-size: 24px; margin-top: 0px; margin-bottom: 10px;">{score_color} {score}/100</p>
+                <div style="margin-bottom: -5px;">
+                    <h4 style="margin-bottom: 2px;">Swing Score</h4>
+                    <p style="font-size: 24px; margin-top: 0px; margin-bottom: 5px;">{score_color} {score}/100</p>
                 </div>
                 """, unsafe_allow_html=True)
                 
                 st.markdown(f"""
-                <div style="margin-bottom: -10px;">
-                    <h4 style="margin-bottom: 5px;">Current Price</h4>
-                    <p style="font-size: 24px; margin-top: 0px; margin-bottom: 10px;">{currency_symbol}{price:.2f}</p>
+                <div style="margin-bottom: -5px;">
+                    <h4 style="margin-bottom: 2px;">Current Price</h4>
+                    <p style="font-size: 24px; margin-top: 0px; margin-bottom: 5px;">{currency_symbol}{price:.2f}</p>
                 </div>
                 """, unsafe_allow_html=True)
                 
                 st.markdown(f"""
-                <div style="margin-bottom: -10px;">
-                    <h4 style="margin-bottom: 5px;">Market</h4>
-                    <p style="font-size: 24px; margin-top: 0px; margin-bottom: 10px;">{market_name}</p>
+                <div style="margin-bottom: -5px;">
+                    <h4 style="margin-bottom: 2px;">Market</h4>
+                    <p style="font-size: 24px; margin-top: 0px; margin-bottom: 5px;">{market_name}</p>
                 </div>
                 """, unsafe_allow_html=True)
                 
                 st.markdown(f"""
-                <div style="margin-bottom: -10px;">
-                    <h4 style="margin-bottom: 5px;">Signal</h4>
-                    <p style="font-size: 24px; margin-top: 0px; margin-bottom: 10px;">{signal_color} {recommendation}</p>
+                <div style="margin-bottom: -5px;">
+                    <h4 style="margin-bottom: 2px;">Signal</h4>
+                    <p style="font-size: 24px; margin-top: 0px; margin-bottom: 5px;">{signal_color} {recommendation}</p>
                 </div>
                 """, unsafe_allow_html=True)
                 
                 st.markdown(f"""
-                <div style="margin-bottom: 10px;">
-                    <h4 style="margin-bottom: 5px;">Setup Type</h4>
-                    <p style="font-size: 24px; margin-top: 0px; margin-bottom: 10px;">{entry_type}</p>
+                <div style="margin-bottom: 5px;">
+                    <h4 style="margin-bottom: 2px;">Setup Type</h4>
+                    <p style="font-size: 24px; margin-top: 0px; margin-bottom: 5px;">{entry_type}</p>
                 </div>
                 """, unsafe_allow_html=True)
                 
                 # Detailed analysis sections - Vertical layout for all screen sizes
                 # This provides better readability as requested
                 
-                # Add custom CSS for reduced spacing
+                # Add custom CSS for significantly reduced spacing
                 st.markdown("""
                 <style>
                 .stMarkdown h3 {
-                    margin-top: 10px !important;
-                    margin-bottom: 10px !important;
-                }
-                .stMarkdown h4 {
-                    margin-top: 8px !important;
-                    margin-bottom: 8px !important;
-                }
-                .stMarkdown p {
                     margin-top: 5px !important;
                     margin-bottom: 5px !important;
+                    line-height: 1.2 !important;
+                }
+                .stMarkdown h4 {
+                    margin-top: 3px !important;
+                    margin-bottom: 3px !important;
+                    line-height: 1.1 !important;
+                }
+                .stMarkdown p {
+                    margin-top: 2px !important;
+                    margin-bottom: 2px !important;
+                    line-height: 1.3 !important;
+                }
+                .stMarkdown ul {
+                    margin-top: 2px !important;
+                    margin-bottom: 2px !important;
+                }
+                .stMarkdown li {
+                    margin-bottom: 1px !important;
+                }
+                div[data-testid="metric-container"] {
+                    padding: 2px 0px !important;
+                    margin: 2px 0px !important;
+                }
+                div[data-testid="stMarkdownContainer"] {
+                    padding-top: 2px !important;
+                    padding-bottom: 2px !important;
                 }
                 </style>
                 """, unsafe_allow_html=True)
@@ -1074,7 +1122,7 @@ def show_live_signals(dashboard, selected_market):
                 else:
                     st.info("🎯 In middle range - good for swing entry")
                 
-                st.markdown("<hr style='margin-top: 15px; margin-bottom: 15px;'>", unsafe_allow_html=True)
+                st.markdown("<hr style='margin-top: 8px; margin-bottom: 8px;'>", unsafe_allow_html=True)
                 
                 # Section 2: Technical Indicators
                 st.markdown("### 📊 **Technical Indicators**")
@@ -1188,7 +1236,7 @@ def show_live_signals(dashboard, selected_market):
                     # Risk metrics
                     st.write(f"• **Risk Level**: {'High' if volatility > 25 else 'Medium' if volatility > 15 else 'Low'}")
                 
-                st.markdown("<hr style='margin-top: 15px; margin-bottom: 15px;'>", unsafe_allow_html=True)
+                st.markdown("<hr style='margin-top: 8px; margin-bottom: 8px;'>", unsafe_allow_html=True)
             
             # Section 3: Trade Setup & Risk Management
             st.markdown("### 🎯 **Trade Setup & Risk Management**")
