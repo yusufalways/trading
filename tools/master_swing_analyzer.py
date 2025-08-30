@@ -104,23 +104,17 @@ class MasterSwingAnalyzer:
                 'market_name': self._get_market_name(symbol),
                 
                 # Technical Analysis (NO CONTRADICTIONS)
-                'technical_indicators': {
-                    'rsi': technical_analysis['rsi'],
-                    'macd': technical_analysis['macd'],
-                    'adx': technical_analysis['adx'],
-                    'moving_averages': technical_analysis['moving_averages'],
-                    'volume_analysis': technical_analysis['volume_analysis'],
-                    'support_resistance': technical_analysis['support_resistance']
-                },
+                'technical_indicators': technical_analysis,
                 
                 # Dashboard compatibility - technical data at top level
                 'rsi': technical_analysis['rsi']['value'],
-                'macd_signal_trend': 'Bullish' if technical_analysis['macd']['histogram'] > 0 else 'Bearish',
-                'volume_trend': technical_analysis['volume_analysis']['status'],
-                'bollinger_bands': technical_analysis.get('bollinger_bands', {}),
-                'trend_strength': technical_analysis['adx']['interpretation'],
-                'support_levels': technical_analysis['support_resistance'].get('support_levels', []),
-                'resistance_levels': technical_analysis['support_resistance'].get('resistance_levels', []),
+                'rsi_status': technical_analysis['rsi']['status'],
+                'rsi_interpretation': technical_analysis['rsi']['interpretation'],
+                'macd_signal_trend': technical_analysis['macd']['status'],
+                'volume_trend': technical_analysis['volume_analysis']['obv_trend'],
+                'trend_strength': technical_analysis['adx']['trend_strength'],
+                'support_levels': [technical_analysis['support_resistance']['support']],
+                'resistance_levels': [technical_analysis['support_resistance']['resistance']],
                 
                 # Market Context
                 'market_context': {
@@ -454,163 +448,136 @@ class MasterSwingAnalyzer:
     
     def _calculate_professional_score(self, technical: Dict, market: Dict, external: Dict) -> int:
         """
-        Professional risk-adjusted scoring - NO SIMPLE ARITHMETIC
-        
-        This replaces the oversimplified score = 50 + 20 approach
-        with a sophisticated multi-factor scoring system.
+        Professional risk-adjusted scoring system based on user feedback.
+        This system uses a weighted model and considers multiple factors to avoid
+        oversimplification and produce a reliable score.
         """
-        # Base score starts at 50
-        base_score = 50
+        weights = {
+            'technical': 0.60,
+            'market': 0.25,
+            'external': 0.15
+        }
+
+        # --- Technical Score (60%) ---
+        tech_score = 0
         
-        # Technical Analysis Weight: 60%
-        technical_score = 0
+        # RSI (15%)
+        rsi_val = technical['rsi']['value']
+        if 30 < rsi_val < 45: tech_score += 15  # Oversold territory, good for entry
+        elif rsi_val <= 30: tech_score += 10 # Deeply oversold, may bounce
+        elif 55 < rsi_val < 70: tech_score -= 10 # Overbought territory
+        elif rsi_val >= 70: tech_score -= 15 # Deeply overbought
+
+        # MACD (15%)
+        if technical['macd']['status'] == "Bullish Crossover": tech_score += 15
+        elif technical['macd']['status'] == "Bullish": tech_score += 10
+        elif technical['macd']['status'] == "Bearish Crossover": tech_score -= 15
+        elif technical['macd']['status'] == "Bearish": tech_score -= 10
+
+        # Trend Strength (ADX) (15%)
+        if technical['adx']['trend_strength'] == "Very Strong Trend": tech_score += 15
+        elif technical['adx']['trend_strength'] == "Strong Trend": tech_score += 10
         
-        # RSI Component (15% of total)
-        rsi_signal = technical['rsi']['signal']
-        if rsi_signal == 'BUY_OPPORTUNITY':
-            technical_score += 25
-        elif rsi_signal == 'POTENTIAL_BUY':
-            technical_score += 15
-        elif rsi_signal == 'HOLD':
-            technical_score += 0
-        elif rsi_signal == 'CAUTION':
-            technical_score -= 10
-        elif rsi_signal == 'SELL_WARNING':
-            technical_score -= 25
-        
-        # MACD Component (15% of total)
-        macd_signal = technical['macd']['signal']
-        if macd_signal == 'BUY':
-            technical_score += 25
-        elif macd_signal == 'HOLD':
-            technical_score += 0
-        elif macd_signal == 'SELL':
-            technical_score -= 25
-        
-        # Trend Strength Component (15% of total)
-        adx_value = technical['adx']['value']
-        if adx_value > 30:
-            technical_score += 15  # Strong trend
-        elif adx_value > 20:
-            technical_score += 10  # Moderate trend
-        else:
-            technical_score -= 5   # Weak trend
-        
-        # Volume Confirmation (15% of total)
-        volume_signal = technical['volume_analysis']['signal']
-        if volume_signal == 'STRONG_CONFIRMATION':
-            technical_score += 15
-        elif volume_signal == 'CONFIRMATION':
-            technical_score += 10
-        elif volume_signal == 'NEUTRAL':
-            technical_score += 0
-        elif volume_signal == 'WEAK_CONFIRMATION':
-            technical_score -= 10
-        
-        # Market Context Weight: 25%
+        # Volume Profile (15%)
+        if technical['volume_analysis']['obv_trend'] == "Accumulation": tech_score += 15
+        else: tech_score -= 15
+
+        # --- Market Context Score (25%) ---
         market_score = 0
+        if market['regime'] == "Bull Market": market_score += 15
+        elif market['regime'] == "Bear Market": market_score -= 15
         
-        # Market Regime (15% of total)
-        regime = market['regime']
-        if regime == 'Bull Market':
-            market_score += 15
-        elif regime == 'Sideways Market':
-            market_score += 0
-        elif regime == 'Bear Market':
-            market_score -= 15
-        
-        # Relative Performance (10% of total)
-        relative_perf = market['relative_performance']
-        if relative_perf == 'Outperforming':
-            market_score += 10
-        elif relative_perf == 'In-line':
-            market_score += 0
-        elif relative_perf == 'Underperforming':
-            market_score -= 10
-        
-        # External Factors Weight: 15%
+        if market['relative_performance'] == "Outperforming": market_score += 10
+        elif market['relative_performance'] == "Underperforming": market_score -= 10
+
+        # --- External Factors Score (15%) ---
         external_score = 0
+        if external['news_sentiment'].get('sentiment') == 'Positive': external_score += 8
+        elif external['news_sentiment'].get('sentiment') == 'Negative': external_score -= 8
+
+        if external['economic_indicators'].get('market_fear') == 'Low Fear': external_score += 7
+        elif external['economic_indicators'].get('market_fear') == 'High Fear': external_score -= 7
+
+        # Combine scores with weights
+        final_score = 50 + (tech_score * weights['technical']) + \
+                      (market_score * weights['market']) + \
+                      (external_score * weights['external'])
+
+        # --- Risk-Adjusted Scoring ---
+        risk_adjustments = {
+            'high_volatility': -10 if technical['volatility']['atr'] / technical['current_price'] > 0.05 else 0,
+            'poor_risk_reward': -15 if self._calculate_risk_reward(technical)[0] < 1.5 else 0,
+            'against_trend': -20 if (market['regime'] == "Bear Market" and technical['moving_averages']['status'] == "Bullish") else 0,
+            'low_volume': -10 if technical['volume_analysis']['obv_trend'] == "Distribution" else 0,
+        }
         
-        # News Sentiment (7.5% of total)
-        news_sentiment = external['news_sentiment'].get('sentiment', 'Unknown')
-        if news_sentiment == 'Positive':
-            external_score += 7
-        elif news_sentiment == 'Neutral':
-            external_score += 0
-        elif news_sentiment == 'Negative':
-            external_score -= 7
+        final_score += sum(risk_adjustments.values())
+
+        return max(0, min(100, int(final_score)))
+
+    def _calculate_risk_reward(self, technical: Dict) -> Tuple[float, float, float]:
+        current_price = technical['current_price']
+        support = technical['support_resistance']['support']
+        resistance = technical['support_resistance']['resistance']
         
-        # Market Fear (VIX) (7.5% of total)
-        market_fear = external['economic_indicators'].get('market_fear', 'Unknown')
-        if market_fear == 'Low Fear':
-            external_score += 7
-        elif market_fear == 'Moderate Fear':
-            external_score += 0
-        elif market_fear == 'High Fear':
-            external_score -= 7
+        potential_gain = resistance - current_price
+        potential_loss = current_price - support
         
-        # Calculate final score
-        final_score = base_score + technical_score + market_score + external_score
-        
-        # Ensure score is between 0 and 100
-        final_score = max(0, min(100, final_score))
-        
-        return int(final_score)
+        ratio = potential_gain / potential_loss if potential_loss > 0 else 0
+        return ratio, potential_gain, potential_loss
+
     
     def _generate_recommendation(self, score: int, technical: Dict, market: Dict, external: Dict) -> Dict:
         """Generate professional recommendation with detailed rationale"""
         
         # Risk/Reward calculation
-        current_price = technical['current_price']
-        resistance = technical['support_resistance']['resistance']
-        support = technical['support_resistance']['support']
-        
-        potential_gain = ((resistance - current_price) / current_price) * 100
-        potential_loss = ((current_price - support) / current_price) * 100
-        
-        risk_reward_ratio = potential_gain / potential_loss if potential_loss > 0 else 0
+        risk_reward_ratio, _, _ = self._calculate_risk_reward(technical)
         
         # Generate recommendation based on score and risk/reward
-        if score >= 85 and risk_reward_ratio >= 2.0:
+        if score >= 75 and risk_reward_ratio >= 2.0:
             action = "STRONG BUY"
             confidence = "Very High"
-            risk_level = "Low"
-            entry_type = "Aggressive Entry"
-        elif score >= 75 and risk_reward_ratio >= 1.5:
+        elif score >= 65 and risk_reward_ratio >= 1.5:
             action = "BUY"
             confidence = "High"
-            risk_level = "Medium"
-            entry_type = "Standard Entry"
-        elif score >= 65 and risk_reward_ratio >= 1.2:
+        elif score >= 55 and risk_reward_ratio >= 1.2:
             action = "WEAK BUY"
             confidence = "Medium"
-            risk_level = "Medium"
-            entry_type = "Conservative Entry"
-        elif score >= 50:
+        elif score >= 45:
             action = "HOLD"
             confidence = "Low"
-            risk_level = "High"
-            entry_type = "Wait"
         else:
             action = "AVOID"
-            confidence = "High"
+            confidence = "Very High"
+
+        # Determine Risk Level based on volatility
+        atr_percentage = technical['volatility']['atr'] / technical['current_price']
+        if atr_percentage > 0.05:
             risk_level = "Very High"
-            entry_type = "No Entry"
+        elif atr_percentage > 0.03:
+            risk_level = "High"
+        else:
+            risk_level = "Medium"
+
+        # Dynamic stops and targets
+        stop_loss = technical['current_price'] - (technical['volatility']['atr'] * 2)
+        target_1 = technical['current_price'] + (technical['volatility']['atr'] * 3)
+        target_2 = technical['current_price'] + (technical['volatility']['atr'] * 5)
         
         return {
             'action': action,
             'confidence': confidence,
             'risk_level': risk_level,
-            'entry_type': entry_type,
+            'entry_type': "Breakout" if technical['moving_averages']['status'] == "Bullish" else "Reversal",
             'risk_management': {
-                'stop_loss': support,
-                'target_1': current_price + (potential_gain * 0.5 / 100 * current_price),
-                'target_2': resistance,
+                'stop_loss': stop_loss,
+                'target_1': target_1,
+                'target_2': target_2,
                 'risk_reward_ratio': f"{risk_reward_ratio:.1f}:1",
                 'position_size': self._calculate_position_size(score, risk_level)
             },
             'trade_setup': {
-                'entry_price': current_price,
+                'entry_price': technical['current_price'],
                 'timeframe': 'Swing (2-10 days)',
                 'market_conditions': f"{market['regime']} in {market['market']} market"
             }
@@ -691,24 +658,22 @@ class MasterSwingAnalyzer:
     
     def get_daily_swing_signals(self, progress_callback=None) -> Dict:
         """
-        Get daily swing signals for all markets
+        Get daily swing signals for all markets.
         
         This is the main function called by the dashboard.
-        Uses comprehensive market watchlists (400+ stocks as per AI_RULES.md)
+        It scans comprehensive market watchlists and returns the top 5 results
+        for each market, sorted by the professional swing score.
         """
         print("🔍 Master Swing Analyzer scanning comprehensive markets...")
         
-        # Import comprehensive market watchlists (400+ stocks)
         from tools.market_stock_lists import get_comprehensive_market_watchlists
-        
-        # Get comprehensive watchlists (not the limited 73 stocks)
         watchlists = get_comprehensive_market_watchlists(validate=False)
         
         results = {
             'timestamp': datetime.now(),
             'scan_type': 'MASTER_PROFESSIONAL',
             'markets': {},
-            'total_stocks_scanned': sum(len(symbols) for symbols in watchlists.values()),
+            'total_stocks_scanned': sum(len(s) for s in watchlists.values()),
             'scan_duration': None
         }
         
@@ -717,12 +682,11 @@ class MasterSwingAnalyzer:
         scanned_count = 0
         
         for market, symbols in watchlists.items():
-            market_name = "🇺🇸 USA" if market == 'usa' else "🇮🇳 India" if market == 'india' else "🇲🇾 Malaysia"
-            
+            market_name = self._get_market_name(symbols[0] if symbols else "")
             print(f"📊 Master analysis for {market_name}: {len(symbols)} stocks")
             market_start = time.time()
-            opportunities = []
             
+            all_results = []
             for symbol in symbols:
                 try:
                     if progress_callback:
@@ -730,25 +694,27 @@ class MasterSwingAnalyzer:
                         progress_callback(f"Analyzing {market_name}: {symbol}", progress)
                     
                     result = self.analyze_stock(symbol)
-                    if result and result.get('swing_score', 0) >= 60:
-                        opportunities.append(result)
-                        print(f"  ✅ {symbol}: {result['swing_score']}/100 - {result['recommendation']}")
+                    if result:
+                        all_results.append(result)
+                        if result.get('swing_score', 0) >= 60:
+                            print(f"  ✅ {symbol}: {result['swing_score']}/100 - {result['recommendation']}")
                     
                     scanned_count += 1
-                    
                 except Exception as e:
                     print(f"  ❌ Error analyzing {symbol}: {e}")
                     scanned_count += 1
                     continue
             
-            # Sort by score
-            opportunities.sort(key=lambda x: x.get('swing_score', 0), reverse=True)
+            # Sort all results by score to get the top performers
+            all_results.sort(key=lambda x: x.get('swing_score', 0), reverse=True)
             
+            opportunities = [res for res in all_results if res.get('swing_score', 0) >= 55]
             market_duration = time.time() - market_start
             
             results['markets'][market] = {
                 'name': market_name,
-                'opportunities': opportunities[:15],  # Top 15
+                'opportunities': opportunities,
+                'top_5': all_results[:5],  # Always list top 5
                 'total_scanned': len(symbols),
                 'opportunities_found': len(opportunities),
                 'scan_duration': market_duration

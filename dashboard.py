@@ -351,6 +351,118 @@ class TradingDashboard:
         
         return 'HOLD'
 
+def show_live_signals(dashboard, selected_market):
+    """Display enhanced swing trading signals with portfolio analysis"""
+    st.header("🎯 Daily Swing Trading Signals")
+    
+    # Initialize session state for swing data if not exists
+    if 'swing_data' not in st.session_state:
+        st.session_state.swing_data = None
+        st.session_state.last_scan_time = None
+    
+    # Manual refresh controls at the top
+    col_refresh1, col_refresh2 = st.columns([1, 3])
+    
+    with col_refresh1:
+        if st.button("🚀 Scan All Markets", type="primary", help="Run a full scan using the Master Analyzer"):
+            st.session_state.swing_data = None # Clear previous results
+            st.session_state.last_scan_time = datetime.now()
+            
+            progress_bar = st.progress(0, text="Initializing scan...")
+            
+            def progress_callback(message, progress):
+                progress_bar.progress(progress, text=message)
+
+            try:
+                # Use the master analyzer directly
+                results = dashboard.analyzer.get_daily_swing_signals(progress_callback)
+                st.session_state.swing_data = results
+                progress_bar.progress(1.0, text="Scan complete!")
+                time.sleep(1) # Keep message on screen
+                progress_bar.empty()
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Scan failed: {e}")
+                progress_bar.empty()
+
+    with col_refresh2:
+        if st.session_state.last_scan_time:
+            st.info(f"Last scan: {st.session_state.last_scan_time.strftime('%Y-%m-%d %H:%M:%S')}")
+
+    # Display results
+    if st.session_state.swing_data:
+        results = st.session_state.swing_data
+        
+        st.subheader("Scan Summary")
+        summary_cols = st.columns(3)
+        summary_cols[0].metric("Total Stocks Scanned", results['total_stocks_scanned'])
+        summary_cols[1].metric("Total Scan Duration", f"{results['scan_duration']:.1f}s")
+        
+        for market_key, market_data in results['markets'].items():
+            if selected_market != "All Markets" and market_data['name'] != selected_market:
+                continue
+
+            st.markdown(f"### {market_data['name']} Top 5 Results")
+            
+            if not market_data['top_5']:
+                st.warning(f"No stocks found for {market_data['name']}.")
+                continue
+
+            df = pd.DataFrame(market_data['top_5'])
+            
+            # Format for display
+            df_display = pd.DataFrame()
+            df_display['Symbol'] = df['symbol']
+            df_display['Price'] = df['current_price'].map('{:,.2f}'.format)
+            df_display['Score'] = df['swing_score']
+            df_display['Recommendation'] = df['recommendation']
+            df_display['Risk'] = df['risk_level']
+            df_display['Confidence'] = df['confidence']
+            
+            st.dataframe(df_display.style.apply(style_rows, axis=1), use_container_width=True)
+
+            # Detailed view for each of the top 5
+            for index, row in df.iterrows():
+                with st.expander(f"🔍 Detailed Analysis for {row['symbol']}"):
+                    display_detailed_analysis(row)
+    else:
+        st.info("Click 'Scan All Markets' to get the latest swing trading signals.")
+
+def display_detailed_analysis(stock_data):
+    """Displays a detailed breakdown of a stock's analysis."""
+    cols = st.columns([2, 3])
+    
+    with cols[0]:
+        st.metric("Swing Score", f"{stock_data['swing_score']}/100")
+        st.metric("Recommendation", stock_data['recommendation'])
+        st.metric("Risk Level", stock_data['risk_level'])
+        st.metric("Confidence", stock_data['confidence'])
+
+    with cols[1]:
+        st.markdown("**Technical Analysis**")
+        tech = stock_data['technical_indicators']
+        st.text(f"RSI: {tech['rsi']['value']:.1f} ({tech['rsi']['status']})")
+        st.text(f"MACD: {tech['macd']['status']}")
+        st.text(f"Trend Strength (ADX): {tech['adx']['trend_strength']}")
+        st.text(f"Volume (OBV): {tech['volume_analysis']['obv_trend']}")
+        
+        st.markdown("**Risk Management**")
+        risk = stock_data['risk_management']
+        st.text(f"Stop Loss: {risk['stop_loss']:.2f}")
+        st.text(f"Target 1: {risk['target_1']:.2f}")
+        st.text(f"Risk/Reward: {risk['risk_reward_ratio']}")
+
+def style_rows(row):
+    """Style dataframe rows based on recommendation"""
+    if 'BUY' in row['Recommendation']:
+        return ['background-color: #2E7D32'] * len(row) # Dark Green
+    elif 'SELL' in row['Recommendation']:
+        return ['background-color: #C62828'] * len(row) # Dark Red
+    elif 'HOLD' in row['Recommendation']:
+        return ['background-color: #FF8F00'] * len(row) # Amber
+    else: # AVOID
+        return ['background-color: #455A64'] * len(row) # Blue Grey
+
 def main():
     dashboard = TradingDashboard()
     
@@ -493,1436 +605,1324 @@ def show_live_signals(dashboard, selected_market):
         st.session_state.last_scan_time = None
     
     # Manual refresh controls at the top
-    if ULTRA_FAST_AVAILABLE:
-        col_refresh1, col_refresh2, col_refresh3, col_refresh4 = st.columns([1, 1, 1, 1])
-    else:
-        col_refresh1, col_refresh2, col_refresh3 = st.columns([1, 1, 2])
+    col_refresh1, col_refresh2 = st.columns([1, 3])
     
     with col_refresh1:
-        manual_refresh = st.button("🔄 Quick Scan", type="primary", help="Quick scan ~73 major stocks (30 seconds)")
-    
-    with col_refresh2:
-        if ULTRA_FAST_AVAILABLE:
-            ultra_fast_refresh = st.button("⚡ Ultra-Fast", type="secondary", help="Ultra-fast scan of 440+ stocks (2-5 minutes)")
-        else:
-            ultra_fast_refresh = False
-    
-    with col_refresh3:
-        comprehensive_refresh = st.button("🚀 Full Scan", type="secondary", help="Comprehensive scan of 1000+ stocks (15-45 minutes)")
-    
-    if ULTRA_FAST_AVAILABLE:
-        with col_refresh4:
-            if st.session_state.last_scan_time:
-                scan_type = st.session_state.get('last_scan_type', 'Quick')
-                st.write(f"⏰ {scan_type}: {st.session_state.last_scan_time.strftime('%H:%M:%S')}")
-            else:
-                st.write("⏰ No data loaded")
-    else:
-        with col_refresh3:
-            if st.session_state.last_scan_time:
-                scan_type = st.session_state.get('last_scan_type', 'Quick')
-                st.write(f"⏰ {scan_type}: {st.session_state.last_scan_time.strftime('%H:%M:%S')}")
-            else:
-                st.write("⏰ No data loaded")
-
-    # Scan type selection info
-    if not st.session_state.swing_data:
-        if ULTRA_FAST_AVAILABLE:
-            st.info("""
-            📊 **Choose Your Scan Type:**
+        if st.button("🚀 Scan All Markets", type="primary", help="Run a full scan using the Master Analyzer"):
+            st.session_state.swing_data = None # Clear previous results
+            st.session_state.last_scan_time = datetime.now()
             
-            🔄 **Quick Scan** (~73 stocks, 30 seconds):
-            - Major US stocks (AAPL, MSFT, etc.)
-            - Top Indian stocks (RELIANCE.NS, TCS.NS, etc.)  
-            - Key Malaysian stocks (1155.KL, etc.)
-            - Best for quick market overview
-            
-            ⚡ **Ultra-Fast Scan** (~440 stocks, 2-5 minutes): **⭐ RECOMMENDED**
-            - 🇺🇸 USA: ~232 major stocks (optimized batch processing)
-            - 🇮🇳 India: ~155 NSE stocks (concurrent analysis)
-            - 🇲🇾 Malaysia: ~53 Bursa stocks (high-speed scanning)
-            - **6x more coverage in just 2-5 minutes!**
-            
-            🚀 **Full Scan** (1000+ stocks, 15-45 minutes):
-            - Deep analysis with advanced technical indicators
-            - Maximum coverage but slower processing
-            - Best for weekend comprehensive research
-            """)
-        else:
-            st.info("""
-            📊 **Choose Your Scan Type:**
-            
-            🔄 **Quick Scan** (~73 stocks, 30 seconds):
-            - Major US stocks (AAPL, MSFT, etc.)
-            - Top Indian stocks (RELIANCE.NS, TCS.NS, etc.)  
-            - Key Malaysian stocks (1155.KL, etc.)
-            - Best for quick market overview
-            
-            🚀 **Full Scan** (1000+ stocks, 15-45 minutes):
-            - Deep analysis with advanced technical indicators
-            - Maximum coverage but slower processing
-            - Best for weekend comprehensive research
-            
-            ⚠️ **Ultra-Fast Scan temporarily unavailable**
-            """)
-    
-    # Only fetch new data if manual refresh is clicked or no data exists
-    if manual_refresh or ultra_fast_refresh or comprehensive_refresh or st.session_state.swing_data is None:
-        
-        # Determine scan type
-        if ultra_fast_refresh and ULTRA_FAST_AVAILABLE:
-            scan_type = "ULTRA_FAST"
-            scan_message = "⚡ Starting ultra-fast market scan of 440+ stocks..."
-            warning_message = "🚀 Ultra-fast scan will complete in 2-5 minutes with optimized processing!"
-        elif ultra_fast_refresh and not ULTRA_FAST_AVAILABLE:
-            # Fallback to comprehensive if ultra-fast not available
-            scan_type = "COMPREHENSIVE"
-            scan_message = "🚀 Starting comprehensive market scan (ultra-fast not available)..."
-            warning_message = "⚠️ Ultra-fast mode unavailable, running comprehensive scan instead (15-45 minutes)"
-            st.warning(warning_message)
-        elif comprehensive_refresh:
-            scan_type = "COMPREHENSIVE"
-            scan_message = "🚀 Starting comprehensive market scan of 1000+ stocks..."
-            warning_message = "⚠️ This comprehensive scan will take 15-45 minutes. Please be patient!"
-        else:
-            scan_type = "QUICK"
-            scan_message = "🔍 Quick scanning ~73 major stocks across markets..."
-            warning_message = None
-        
-        if warning_message:
-            if scan_type == "ULTRA_FAST":
-                st.success(warning_message)
-            else:
-                st.warning(warning_message)
-        
-        # Progress tracking for ultra-fast and comprehensive scans
-        if scan_type in ["ULTRA_FAST", "COMPREHENSIVE"]:
-            progress_bar = st.progress(0)
-            status_text = st.empty()
+            progress_bar = st.progress(0, text="Initializing scan...")
             
             def progress_callback(message, progress):
-                progress_bar.progress(progress)
-                status_text.text(message)
-            
-            start_time = time.time()
-            
-            with st.spinner(scan_message):
-                if scan_type == "ULTRA_FAST" and ULTRA_FAST_AVAILABLE:
-                    # ✅ USING MASTER SWING ANALYZER - COMPLIANCE WITH AI_RULES.md
-                    from tools.master_swing_analyzer import get_daily_swing_signals, get_portfolio_analysis
-                    
-                    st.session_state.swing_data = get_daily_swing_signals(
-                        progress_callback=progress_callback
-                    )
-                    st.session_state.last_scan_type = "Ultra-Fast"
-                    
-                else:  # COMPREHENSIVE (or fallback from ultra-fast)
-                    # ✅ USING MASTER SWING ANALYZER - COMPLIANCE WITH AI_RULES.md
-                    from tools.master_swing_analyzer import get_daily_swing_signals, get_portfolio_analysis
-                    
-                    st.session_state.swing_data = get_daily_swing_signals(
-                        progress_callback=progress_callback
-                    )
-                    if scan_type == "ULTRA_FAST":
-                        st.session_state.last_scan_type = "Comprehensive (fallback)"
-                    else:
-                        st.session_state.last_scan_type = "Full Scan"
-                
-                # Get fresh portfolio analysis (not cached)
-                if st.session_state.swing_data and dashboard.portfolio:
-                    st.session_state.swing_data['portfolio_analysis'] = get_portfolio_analysis(dashboard.portfolio)
-                
-                # Store scan results for charts tab
-                st.session_state.scan_results = st.session_state.swing_data
-                
-                st.session_state.last_scan_time = datetime.now()
-            
-            progress_bar.progress(1.0)
-            status_text.text(f"✅ {scan_type.replace('_', ' ').title()} scan completed!")
-            
-            elapsed_time = time.time() - start_time
-            if scan_type == "ULTRA_FAST":
-                st.success(f"⚡ Ultra-fast scan completed in {elapsed_time:.1f} seconds ({elapsed_time/60:.1f} minutes)!")
-            else:
-                st.success(f"✅ Comprehensive scan completed in {elapsed_time/60:.1f} minutes!")
-            
-        else:
-            # Quick scan
-            with st.spinner(scan_message):
-                # ✅ USING MASTER SWING ANALYZER - COMPLIANCE WITH AI_RULES.md
-                from tools.master_swing_analyzer import get_daily_swing_signals, get_portfolio_analysis
-                
-                # Get cached market data
-                st.session_state.swing_data = get_daily_swing_signals()
-                
-                # Get fresh portfolio analysis (not cached)
-                if st.session_state.swing_data and dashboard.portfolio:
-                    st.session_state.swing_data['portfolio_analysis'] = get_portfolio_analysis(dashboard.portfolio)
-                
-                # Store scan results for charts tab
-                st.session_state.scan_results = st.session_state.swing_data
-                
-                st.session_state.last_scan_time = datetime.now()
-                st.session_state.last_scan_type = "Quick Scan"
-            
-            if st.session_state.swing_data:
-                st.success("✅ Quick scan completed!")
-            else:
-                st.error("❌ Failed to fetch signals. Please try again.")
-    
-    swing_data = st.session_state.swing_data
-    
-    if not swing_data:
-        st.warning("🔄 Please choose a scan type above to load swing trading opportunities.")
-        return
+                progress_bar.progress(progress, text=message)
 
-    # Summary metrics - Responsive layout
-    total_opportunities = sum(len(market['opportunities']) for market in swing_data['markets'].values())
-    strong_setups = sum(len([opp for opp in market['opportunities'] if opp['swing_score'] >= 70]) 
-                       for market in swing_data['markets'].values())
-    
-    # Get total stocks scanned (different for quick vs comprehensive)
-    total_scanned = swing_data.get('total_stocks_scanned', 
-                                  sum(market.get('total_scanned', 0) for market in swing_data['markets'].values()))
-    
-    scan_type = swing_data.get('scan_type', 'QUICK')
-    
-    # Create responsive metric cards
-    if is_mobile():
-        # Stack metrics vertically on mobile
-        create_metric_card("🔍 Total Opportunities", total_opportunities)
-        create_metric_card("💪 Strong Setups (70+)", strong_setups)
-        create_metric_card("📊 Stocks Scanned", f"{total_scanned} ({scan_type})")
-        
-        portfolio_positions = len(swing_data.get('portfolio_analysis', []))
-        create_metric_card("📊 Portfolio Positions", portfolio_positions)
-        
-        last_update = swing_data['timestamp'].strftime("%H:%M")
-        create_metric_card("🕒 Last Update", last_update)
-    else:
-        # Use columns for desktop
-        col1, col2, col3, col4, col5 = st.columns(5)
-        
-        with col1:
-            st.metric("🔍 Total Opportunities", total_opportunities)
-        
-        with col2:
-            st.metric("💪 Strong Setups (70+)", strong_setups)
-        
-        with col3:
-            st.metric("📊 Stocks Scanned", total_scanned, delta=f"{scan_type} scan")
-        
-        with col4:
-            portfolio_positions = len(swing_data.get('portfolio_analysis', []))
-            st.metric("📊 Portfolio Positions", portfolio_positions)
-        
-        with col5:
-            last_update = swing_data['timestamp'].strftime("%H:%M")
-            st.metric("🕒 Last Update", last_update)
-    
-    # Show additional scan statistics for comprehensive scans
-    if scan_type == "COMPREHENSIVE" and swing_data.get('scan_duration'):
-        scan_duration = swing_data['scan_duration']
-        st.info(f"""
-        🚀 **Comprehensive Scan Statistics:**
-        ⏱️ Total scan time: {scan_duration/60:.1f} minutes
-        📊 Stocks analyzed: {total_scanned}
-        ⚡ Average: {scan_duration/total_scanned:.2f} seconds per stock
-        🎯 Opportunities found: {total_opportunities} ({(total_opportunities/total_scanned)*100:.2f}% hit rate)
-        """)
-    
-    # Portfolio positions analysis (if any) - Mobile-responsive
-    if swing_data.get('portfolio_analysis'):
-        
-        def show_portfolio_analysis():
-            st.markdown("**Your existing positions with updated swing analysis:**")
-            
-            for position in swing_data['portfolio_analysis']:
-                symbol = position['symbol']
-                action = position['action']
-                pnl_pct = position['pnl_pct']
-                current_price = position['current_price']
-                
-                # Color coding for actions
-                if action in ['SELL', 'PARTIAL_SELL']:
-                    action_color = "🟢"
-                    action_text = f"**{action}**"
-                elif action in ['STOP_LOSS', 'WATCH_CLOSE']:
-                    action_color = "🔴"
-                    action_text = f"**{action}**"
-                else:
-                    action_color = "🟡"
-                    action_text = action
-                
-                # Price formatting
-                if '.NS' in symbol:
-                    price_str = f"₹{current_price:.2f}"
-                elif '.KL' in symbol:
-                    price_str = f"RM{current_price:.2f}"
-                else:
-                    price_str = f"${current_price:.2f}"
-                
-                with st.expander(f"{action_color} {symbol} | {price_str} | P&L: {pnl_pct:+.1f}% | {action_text}"):
-                    if is_mobile():
-                        # Stack vertically on mobile
-                        st.write("**Position Details:**")
-                        st.write(f"• Entry Price: {price_str.replace(str(current_price), str(position['entry_price']))}")
-                        st.write(f"• Shares: {position['shares']}")
-                        st.write(f"• Current P&L: {pnl_pct:+.1f}%")
-                        
-                        st.write("**Analysis Signals:**")
-                        for signal in position['signals'][:3]:
-                            st.write(f"• {signal}")
-                        
-                        # Action buttons - mobile layout
-                        st.write("**Actions:**")
-                        if action == 'SELL':
-                            if st.button(f"🔴 SELL ALL {symbol}", key=f"sell_{symbol}"):
-                                result = dashboard.portfolio.sell_stock(symbol, current_price, 
-                                                                      shares=position['shares'], 
-                                                                      reason="SWING_SIGNAL")
-                                if result['success']:
-                                    st.success(f"✅ {result['message']}")
-                                    st.rerun()
-                                else:
-                                    st.error(f"❌ {result['message']}")
-                        
-                        elif action == 'PARTIAL_SELL':
-                            sell_qty = st.number_input(f"Shares to sell ({symbol}):", 
-                                                     min_value=1, 
-                                                     max_value=position['shares'],
-                                                     value=min(position['shares'] // 2, 10),
-                                                     key=f"partial_{symbol}")
-                            if st.button(f"📉 PARTIAL SELL {symbol}", key=f"partial_sell_{symbol}"):
-                                result = dashboard.portfolio.sell_stock(symbol, current_price, 
-                                                                      shares=sell_qty, 
-                                                                      reason="PARTIAL_PROFIT")
-                                if result['success']:
-                                    st.success(f"✅ {result['message']}")
-                                    st.rerun()
-                                else:
-                                    st.error(f"❌ {result['message']}")
-                    else:
-                        # Use columns for desktop
-                        col1, col2 = st.columns(2)
-                        
-                        with col1:
-                            st.write("**Position Details:**")
-                            st.write(f"• Entry Price: {price_str.replace(str(current_price), str(position['entry_price']))}")
-                            st.write(f"• Shares: {position['shares']}")
-                            st.write(f"• Current P&L: {pnl_pct:+.1f}%")
-                        
-                        with col2:
-                            st.write("**Analysis Signals:**")
-                            for signal in position['signals'][:3]:
-                                st.write(f"• {signal}")
-                        
-                        # Action buttons - desktop layout
-                        if action == 'SELL':
-                            if st.button(f"🔴 SELL ALL {symbol}", key=f"sell_{symbol}"):
-                                result = dashboard.portfolio.sell_stock(symbol, current_price, 
-                                                                      shares=position['shares'], 
-                                                                      reason="SWING_SIGNAL")
-                                if result['success']:
-                                    st.success(f"✅ {result['message']}")
-                                    st.rerun()
-                                else:
-                                    st.error(f"❌ {result['message']}")
-                        
-                        elif action == 'PARTIAL_SELL':
-                            sell_col1, sell_col2 = st.columns(2)
-                            with sell_col1:
-                                sell_qty = st.number_input(f"Shares to sell ({symbol}):", 
-                                                         min_value=1, 
-                                                         max_value=position['shares'],
-                                                         value=min(position['shares'] // 2, 10),
-                                                         key=f"partial_{symbol}")
-                            with sell_col2:
-                                if st.button(f"📉 PARTIAL SELL {symbol}", key=f"partial_sell_{symbol}"):
-                                    result = dashboard.portfolio.sell_stock(symbol, current_price, 
-                                                                          shares=sell_qty, 
-                                                                          reason="PARTIAL_PROFIT")
-                                    if result['success']:
-                                        st.success(f"✅ {result['message']}")
-                                        st.rerun()
-                                    else:
-                                        st.error(f"❌ {result['message']}")
-        
-        if is_mobile():
-            create_expandable_section("🎯 Current Portfolio Analysis", show_portfolio_analysis, expanded=True)
-        else:
-            st.subheader("🎯 Current Portfolio Analysis")
-            show_portfolio_analysis()
-        
-        st.markdown("---")
-    
-    # Market opportunities - Mobile responsive
-    def show_market_opportunities():
-        for market_key, market_data in swing_data['markets'].items():
-            market_name = market_data['name']
-            opportunities = market_data['opportunities']
-            
-            if opportunities:
-                
-                def show_market_data():
-                    if is_mobile():
-                        # Mobile-friendly card layout
-                        for i, opp in enumerate(opportunities, 1):
-                            symbol = opp['symbol']
-                            price = opp['current_price']
-                            score = opp['swing_score']
-                            recommendation = opp['recommendation']
-                            entry_type = opp['entry_type']
-                            risk_reward = opp['risk_management']['risk_reward_ratio']
-                            
-                            # Format price
-                            if '.NS' in symbol:
-                                price_str = f"₹{price:.2f}"
-                            elif '.KL' in symbol:
-                                price_str = f"RM{price:.2f}"
-                            else:
-                                price_str = f"${price:.2f}"
-                            
-                            # Color code based on score
-                            if score >= 80:
-                                score_color = "🟢"
-                            elif score >= 60:
-                                score_color = "🟡"
-                            else:
-                                score_color = "🔴"
-                            
-                            with st.container():
-                                st.markdown(f"""
-                                **#{i} {symbol}** {score_color} **Score: {score}**
-                                - **Price**: {price_str}
-                                - **Signal**: {recommendation}
-                                - **Setup**: {entry_type}  
-                                - **Risk:Reward**: {risk_reward}
-                                - **Signals**: {', '.join(opp['signals'][:2])}
-                                """)
-                                
-                                # Buy button for mobile
-                                if st.button(f"🟢 BUY {symbol}", key=f"buy_{symbol}_{market_key}"):
-                                    st.session_state.selected_stock_for_buy = opp
-                                    st.rerun()
-                                
-                                st.markdown("---")
-                    
-                    else:
-                        # Desktop table layout
-                        display_data = []
-                        for opp in opportunities:
-                            symbol = opp['symbol']
-                            price = opp['current_price']
-                            score = opp['swing_score']
-                            recommendation = opp['recommendation']
-                            entry_type = opp['entry_type']
-                            risk_reward = opp['risk_management']['risk_reward_ratio']
-                            
-                            # Format price
-                            if '.NS' in symbol:
-                                price_str = f"₹{price:.2f}"
-                            elif '.KL' in symbol:
-                                price_str = f"RM{price:.2f}"
-                            else:
-                                price_str = f"${price:.2f}"
-                            
-                            display_data.append({
-                                'Symbol': symbol,
-                                'Price': price_str,
-                                'Score': score,
-                                'Signal': recommendation,
-                                'Setup': entry_type,
-                                'R:R': risk_reward,
-                                'Key Signals': ', '.join(opp['signals'][:2])
-                            })
-                        
-                        df = pd.DataFrame(display_data)
-                        st.dataframe(df, use_container_width=True)
-                        
-                        # Action buttons for desktop
-                        if len(opportunities) > 0:
-                            st.markdown("**Quick Actions:**")
-                            action_cols = create_responsive_columns([1]*min(5, len(opportunities)), mobile_stack=False)
-                            
-                            for i, (col, opp) in enumerate(zip(action_cols, opportunities[:5])):
-                                with col:
-                                    if st.button(f"🟢 BUY {opp['symbol']}", key=f"buy_{opp['symbol']}_{market_key}"):
-                                        st.session_state.selected_stock_for_buy = opp
-                                        st.rerun()
-                
-                if is_mobile():
-                    create_expandable_section(f"{market_name} ({len(opportunities)} opportunities)", show_market_data, expanded=True)
-                else:
-                    st.markdown(f"### {market_name}")
-                    show_market_data()
-            
-            else:
-                if not is_mobile():
-                    st.info(f"No strong swing opportunities found in {market_name} market today.")
-    
-    if is_mobile():
-        create_expandable_section("🌍 Market Opportunities", show_market_opportunities, expanded=True)
-    else:
-        st.subheader("🌍 Top 5 Swing Opportunities by Market")
-        show_market_opportunities()
-    
-    # Market scanning summary - Responsive
-    def show_scanning_summary():
-        if is_mobile():
-            # Stack summary vertically on mobile
-            for market_key, market_data in swing_data['markets'].items():
-                market_name = market_data['name']
-                scanned = market_data['total_scanned']
-                found = market_data['opportunities_found']
-                
-                create_metric_card(
-                    f"{market_name}",
-                    f"{found} opportunities",
-                    f"from {scanned} stocks"
-                )
-        else:
-            # Use columns for desktop
-            summary_cols = st.columns(3)
-            for i, (market_key, market_data) in enumerate(swing_data['markets'].items()):
-                with summary_cols[i % 3]:
-                    market_name = market_data['name']
-                    scanned = market_data['total_scanned']
-                    found = market_data['opportunities_found']
-                    
-                    st.metric(
-                        f"{market_name}",
-                        f"{found} opportunities",
-                        f"from {scanned} stocks"
-                    )
-    
-    st.markdown("---")
-    if is_mobile():
-        create_expandable_section("📊 Scanning Summary", show_scanning_summary, expanded=False)
-    else:
-        st.subheader("📊 Scanning Summary")
-        show_scanning_summary()
-    
-    summary_cols = st.columns(3)
-    for i, (market_key, market_data) in enumerate(swing_data['markets'].items()):
-        with summary_cols[i]:
-            market_name = market_data['name']
-            scanned = market_data['total_scanned']
-            found = market_data['opportunities_found']
-            
-            st.metric(
-                f"{market_name}",
-                f"{found} opportunities",
-                f"from {scanned} stocks"
-            )
-    
-    # Data management section
-    st.markdown("---")
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        if st.button("🔄 Refresh All Data", type="secondary", help="Refresh all swing signals"):
-            # Clear cached data and refresh
-            st.session_state.swing_data = None
-            st.rerun()
-    
-    with col2:
-        if st.button("🧹 Clear Cache", help="Clear all cached analysis data"):
-            # Clear streamlit cache
-            st.cache_data.clear()
-            st.success("✅ Cache cleared")
-    
-    with col3:
-        scan_time = st.session_state.last_scan_time
-        if scan_time:
-            time_ago = (datetime.now() - scan_time).total_seconds() / 60
-            st.write(f"🕐 Data age: {time_ago:.1f} minutes")
-        else:
-            st.write("🕐 No data loaded")
-    
-    # Show watchlist if exists
-    if 'watchlist' in st.session_state and st.session_state.watchlist:
-        st.markdown("---")
-        with st.expander("👁️ Your Watchlist", expanded=False):
-            watchlist_col1, watchlist_col2 = st.columns([3, 1])
-            
-            with watchlist_col1:
-                for symbol in st.session_state.watchlist:
-                    st.write(f"• {symbol}")
-            
-            with watchlist_col2:
-                if st.button("Clear Watchlist", key="clear_watchlist"):
-                    st.session_state.watchlist = []
-                    st.success("✅ Watchlist cleared")
-    
-    # Detailed Technical Analysis Section
-    st.markdown("---")
-    st.header("📈 Detailed Stock Analysis")
-    st.markdown("**Comprehensive technical analysis for all swing opportunities with charts, levels, and clear justification**")
-    
-    # Analysis selection
-    all_opportunities = []
-    for market_key, market_data in swing_data['markets'].items():
-        for opp in market_data['opportunities']:
-            opp['market_name'] = market_data['name']
-            all_opportunities.append(opp)
-    
-    if all_opportunities:
-        # Sort by swing score for better organization
-        all_opportunities.sort(key=lambda x: x['swing_score'], reverse=True)
-        
-        # Initialize session state for detailed analysis selections
-        if 'selected_stocks_for_analysis' not in st.session_state:
-            st.session_state.selected_stocks_for_analysis = []
-        if 'analysis_depth' not in st.session_state:
-            st.session_state.analysis_depth = "Comprehensive"
-        
-        # Stock selection for detailed analysis - Responsive
-        stock_symbols = [f"{opp['symbol']} ({opp['market_name']}) - Score: {opp['swing_score']}" for opp in all_opportunities]
-        
-        if is_mobile():
-            # Mobile layout - use selectbox for better scrolling experience
-            st.markdown("🔍 **Select stocks for detailed analysis:**")
-            
-            # Show current selections
-            current_selections = st.session_state.selected_stocks_for_analysis if st.session_state.selected_stocks_for_analysis else []
-            
-            if current_selections:
-                st.markdown(f"**Selected ({len(current_selections)}):** {', '.join([s.split(' (')[0] for s in current_selections])}")
-                if st.button("Clear All Selections"):
-                    st.session_state.selected_stocks_for_analysis = []
-                    st.rerun()
-            
-            # Use selectbox for adding stocks (better for mobile)
-            stock_to_add = st.selectbox(
-                "Add a stock for analysis:",
-                [""] + [s for s in stock_symbols if s not in current_selections],
-                help="Select a stock to add to your analysis list"
-            )
-            
-            if stock_to_add and stock_to_add not in current_selections:
-                if len(current_selections) < 5:
-                    current_selections.append(stock_to_add)
-                    st.session_state.selected_stocks_for_analysis = current_selections
-                    st.rerun()
-                else:
-                    st.warning("Maximum 5 stocks allowed for analysis")
-            
-            # Remove individual stocks
-            if current_selections:
-                stock_to_remove = st.selectbox(
-                    "Remove a stock:",
-                    [""] + current_selections,
-                    help="Select a stock to remove from analysis"
-                )
-                
-                if stock_to_remove:
-                    current_selections.remove(stock_to_remove)
-                    st.session_state.selected_stocks_for_analysis = current_selections
-                    st.rerun()
-            
-            selected_stocks = current_selections
-            
-            analysis_depth = st.selectbox(
-                "📊 Analysis Depth:",
-                ["Essential", "Comprehensive", "Expert"],
-                index=["Essential", "Comprehensive", "Expert"].index(st.session_state.analysis_depth),
-                help="Essential: Key levels only | Comprehensive: Full analysis | Expert: All indicators",
-                key="analysis_depth_selector"
-            )
-        else:
-            # Desktop layout - use columns
-            col1, col2 = st.columns([2, 1])
-            
-            with col1:
-                # No default selection - user must choose
-                default_selection = st.session_state.selected_stocks_for_analysis if st.session_state.selected_stocks_for_analysis else []
-                
-                selected_stocks = st.multiselect(
-                    "🔍 Select stocks for detailed analysis:",
-                    stock_symbols,
-                    default=[s for s in default_selection if s in stock_symbols],  # Filter valid options
-                    help="Choose up to 5 stocks for comprehensive technical analysis",
-                    key="detailed_analysis_selector"
-                )
-            
-            with col2:
-                analysis_depth = st.selectbox(
-                    "📊 Analysis Depth:",
-                    ["Essential", "Comprehensive", "Expert"],
-                    index=["Essential", "Comprehensive", "Expert"].index(st.session_state.analysis_depth),
-                    help="Essential: Key levels only | Comprehensive: Full analysis | Expert: All indicators",
-                    key="analysis_depth_selector"
-                )
-        
-        # Update session state
-        st.session_state.selected_stocks_for_analysis = selected_stocks
-        st.session_state.analysis_depth = analysis_depth
-        
-        # Generate detailed analysis for selected stocks
-        for stock_option in selected_stocks[:5]:  # Limit to 5 for performance
-            # Extract symbol from the option string
-            symbol = stock_option.split(' (')[0]
-            selected_stock = next(opp for opp in all_opportunities if opp['symbol'] == symbol)
-            
-            # Create detailed analysis section
-            with st.expander(f"📊 **{symbol}** - Detailed Technical Analysis", expanded=False):
-                
-                # Header with key metrics
-                score = selected_stock['swing_score']
-                price = selected_stock['current_price']
-                market_name = selected_stock['market_name']
-                entry_type = selected_stock['entry_type']
-                recommendation = selected_stock['recommendation']
-                
-                # Currency formatting
-                if '.NS' in symbol:
-                    currency_symbol = "₹"
-                elif '.KL' in symbol:
-                    currency_symbol = "RM"
-                else:
-                    currency_symbol = "$"
-                
-                # Main metrics - Vertical layout for better readability
-                score_color = "🟢" if score >= 80 else "🟡" if score >= 60 else "🔴"
-                signal_color = "🟢" if recommendation == "STRONG BUY" else "🟡"
-                
-                # Display metrics vertically with minimal spacing
-                st.markdown(f"""
-                <div style="margin-bottom: -5px;">
-                    <h4 style="margin-bottom: 2px;">Swing Score</h4>
-                    <p style="font-size: 24px; margin-top: 0px; margin-bottom: 5px;">{score_color} {score}/100</p>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                st.markdown(f"""
-                <div style="margin-bottom: -5px;">
-                    <h4 style="margin-bottom: 2px;">Current Price</h4>
-                    <p style="font-size: 24px; margin-top: 0px; margin-bottom: 5px;">{currency_symbol}{price:.2f}</p>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                st.markdown(f"""
-                <div style="margin-bottom: -5px;">
-                    <h4 style="margin-bottom: 2px;">Market</h4>
-                    <p style="font-size: 24px; margin-top: 0px; margin-bottom: 5px;">{market_name}</p>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                st.markdown(f"""
-                <div style="margin-bottom: -5px;">
-                    <h4 style="margin-bottom: 2px;">Signal</h4>
-                    <p style="font-size: 24px; margin-top: 0px; margin-bottom: 5px;">{signal_color} {recommendation}</p>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                st.markdown(f"""
-                <div style="margin-bottom: 5px;">
-                    <h4 style="margin-bottom: 2px;">Setup Type</h4>
-                    <p style="font-size: 24px; margin-top: 0px; margin-bottom: 5px;">{entry_type}</p>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # Detailed analysis sections - Vertical layout for all screen sizes
-                # This provides better readability as requested
-                
-                # Add custom CSS for significantly reduced spacing
-                st.markdown("""
-                <style>
-                .stMarkdown h3 {
-                    margin-top: 5px !important;
-                    margin-bottom: 5px !important;
-                    line-height: 1.2 !important;
-                }
-                .stMarkdown h4 {
-                    margin-top: 3px !important;
-                    margin-bottom: 3px !important;
-                    line-height: 1.1 !important;
-                }
-                .stMarkdown p {
-                    margin-top: 2px !important;
-                    margin-bottom: 2px !important;
-                    line-height: 1.3 !important;
-                }
-                .stMarkdown ul {
-                    margin-top: 2px !important;
-                    margin-bottom: 2px !important;
-                }
-                .stMarkdown li {
-                    margin-bottom: 1px !important;
-                }
-                div[data-testid="metric-container"] {
-                    padding: 2px 0px !important;
-                    margin: 2px 0px !important;
-                }
-                div[data-testid="stMarkdownContainer"] {
-                    padding-top: 2px !important;
-                    padding-bottom: 2px !important;
-                }
-                </style>
-                """, unsafe_allow_html=True)
-                
-                # Section 1: Support & Resistance Analysis
-                st.markdown("### 🎯 **Support & Resistance Levels**")
-                
-                # Get detailed levels from the analysis
-                support_levels = selected_stock.get('support_levels', [price * 0.95, price * 0.90])
-                resistance_levels = selected_stock.get('resistance_levels', [price * 1.05, price * 1.10])
-                
-                # Current position relative to levels
-                nearest_support = max([level for level in support_levels if level <= price], default=price * 0.95)
-                nearest_resistance = min([level for level in resistance_levels if level >= price], default=price * 1.05)
-                
-                support_distance = ((price - nearest_support) / price) * 100
-                resistance_distance = ((nearest_resistance - price) / price) * 100
-                
-                # Support levels
-                st.markdown("**🟢 Support Levels:**")
-                for i, level in enumerate(sorted(support_levels, reverse=True)[:3]):
-                    distance = ((price - level) / price) * 100
-                    strength = "Strong" if i == 0 else "Medium" if i == 1 else "Weak"
-                    st.write(f"• **{strength}**: {currency_symbol}{level:.2f} ({distance:+.1f}%)")
-                
-                # Resistance levels  
-                st.markdown("**🔴 Resistance Levels:**")
-                for i, level in enumerate(sorted(resistance_levels)[:3]):
-                    distance = ((level - price) / price) * 100
-                    strength = "Strong" if i == 0 else "Medium" if i == 1 else "Weak"
-                    st.write(f"• **{strength}**: {currency_symbol}{level:.2f} (+{distance:.1f}%)")
-                
-                # Position analysis
-                st.markdown("**📍 Current Position:**")
-                if support_distance <= 3:
-                    st.success(f"✅ Near Support ({support_distance:.1f}% above)")
-                elif resistance_distance <= 3:
-                    st.warning(f"⚠️ Near Resistance ({resistance_distance:.1f}% below)")
-                else:
-                    st.info("🎯 In middle range - good for swing entry")
-                
-                st.markdown("<hr style='margin-top: 8px; margin-bottom: 8px;'>", unsafe_allow_html=True)
-                
-                # Section 2: Technical Indicators
-                st.markdown("### 📊 **Technical Indicators**")
-                
-                # Get technical data from enhanced analysis
-                rsi = selected_stock.get('rsi', 45 + (score - 50) * 0.6)
-                macd_signal = selected_stock.get('macd_signal_trend', 'Bullish' if score > 60 else 'Bearish')
-                volume_trend = selected_stock.get('volume_trend', 'High' if score > 70 else 'Normal')
-                bollinger = selected_stock.get('bollinger_bands', {})
-                stochastic = selected_stock.get('stochastic', 50)
-                trend_strength = selected_stock.get('trend_strength', 'Neutral')
-                momentum = selected_stock.get('momentum', 0)
-                volatility = selected_stock.get('volatility', 20)
-                
-                # Current position relative to levels
-                support_levels = selected_stock.get('support_levels', [price * 0.95, price * 0.90])
-                resistance_levels = selected_stock.get('resistance_levels', [price * 1.05, price * 1.10])
-                nearest_support = max([level for level in support_levels if level <= price], default=price * 0.95)
-                nearest_resistance = min([level for level in resistance_levels if level >= price], default=price * 1.05)
-                
-                support_distance = ((price - nearest_support) / price) * 100
-                resistance_distance = ((nearest_resistance - price) / price) * 100
-                
-                # Support levels
-                st.markdown("**🟢 Support Levels:**")
-                for i, level in enumerate(sorted(support_levels, reverse=True)[:3]):
-                    distance = ((price - level) / price) * 100
-                    strength = "Strong" if i == 0 else "Medium" if i == 1 else "Weak"
-                    st.write(f"• **{strength}**: {currency_symbol}{level:.2f} ({distance:+.1f}%)")
-                
-                # Resistance levels  
-                st.markdown("**🔴 Resistance Levels:**")
-                for i, level in enumerate(sorted(resistance_levels)[:3]):
-                    distance = ((level - price) / price) * 100
-                    strength = "Strong" if i == 0 else "Medium" if i == 1 else "Weak"
-                    st.write(f"• **{strength}**: {currency_symbol}{level:.2f} (+{distance:.1f}%)")
-                
-                # Position analysis
-                st.markdown("**📍 Current Position:**")
-                if support_distance <= 3:
-                    st.success(f"✅ Near Support ({support_distance:.1f}% above)")
-                elif resistance_distance <= 3:
-                    st.warning(f"⚠️ Near Resistance ({resistance_distance:.1f}% below)")
-                else:
-                    st.info("🎯 In middle range - good for swing entry")
-                
-                st.markdown("---")  # Separator between sections
-                
-                # RSI Analysis
-                st.markdown("**📈 RSI (14-day):**")
-                rsi_color = "🟢" if 30 <= rsi <= 70 else "🔴" if rsi > 70 else "🟡"
-                rsi_signal = "Overbought" if rsi > 70 else "Oversold" if rsi < 30 else "Neutral"
-                st.write(f"{rsi_color} **{rsi:.1f}** - {rsi_signal}")
-                
-                # MACD Analysis
-                st.markdown("**📊 MACD Signal:**")
-                macd_color = "🟢" if macd_signal == 'Bullish' else "🔴"
-                st.write(f"{macd_color} **{macd_signal}** momentum")
-                
-                # Moving Averages
-                st.markdown("**📈 Moving Averages:**")
-                sma_20 = selected_stock.get('sma_20', price)
-                sma_50 = selected_stock.get('sma_50', price)
-                ma20_pos = "Above" if price > sma_20 else "Below"
-                ma50_pos = "Above" if price > sma_50 else "Below"
-                ma20_color = "🟢" if ma20_pos == "Above" else "🔴"
-                ma50_color = "🟢" if ma50_pos == "Above" else "🔴"
-                st.write(f"{ma20_color} **MA(20)**: {ma20_pos} ({currency_symbol}{sma_20:.2f})")
-                st.write(f"{ma50_color} **MA(50)**: {ma50_pos} ({currency_symbol}{sma_50:.2f})")
-                
-                # Volume Analysis
-                st.markdown("**📊 Volume Analysis:**")
-                vol_color = "🟢" if volume_trend == 'High' else "🟡" if volume_trend == 'Normal' else "🔴"
-                st.write(f"{vol_color} **Volume**: {volume_trend}")
-                
-                if analysis_depth in ["Comprehensive", "Expert"]:
-                    # Additional indicators for comprehensive analysis
-                    st.markdown("**🔄 Additional Signals:**")
-                    
-                    # Stochastic
-                    stoch_signal = "Overbought" if stochastic > 80 else "Oversold" if stochastic < 20 else "Neutral"
-                    st.write(f"• **Stochastic**: {stochastic:.1f} ({stoch_signal})")
-                    
-                    # Trend strength
-                    trend_color = "🟢" if "Up" in trend_strength else "🔴" if "Down" in trend_strength else "🟡"
-                    st.write(f"• **Trend**: {trend_color} {trend_strength}")
-                    
-                    # Momentum
-                    momentum_color = "🟢" if momentum > 0 else "🔴"
-                    st.write(f"• **Momentum**: {momentum_color} {momentum:+.1f}%")
-                    
-                    # Volatility
-                    vol_level = "High" if volatility > 30 else "Low" if volatility < 15 else "Normal"
-                    st.write(f"• **Volatility**: {volatility:.1f}% ({vol_level})")
-            
-                if analysis_depth == "Expert":
-                    # Expert level indicators
-                    st.markdown("**🎯 Expert Indicators:**")
-                    
-                    # Bollinger Band position
-                    if bollinger:
-                        bb_position = ((price - bollinger.get('lower', price)) / 
-                                     (bollinger.get('upper', price) - bollinger.get('lower', price))) * 100
-                        bb_signal = "Upper" if bb_position > 75 else "Lower" if bb_position < 25 else "Middle"
-                        st.write(f"• **BB Position**: {bb_position:.0f}% ({bb_signal})")
-                    
-                    # Volume ratio
-                    volume_ratio = selected_stock.get('volume_ratio', 1.0)
-                    st.write(f"• **Volume Ratio**: {volume_ratio:.1f}x average")
-                    
-                    # Risk metrics
-                    st.write(f"• **Risk Level**: {'High' if volatility > 25 else 'Medium' if volatility > 15 else 'Low'}")
-                
-                st.markdown("<hr style='margin-top: 8px; margin-bottom: 8px;'>", unsafe_allow_html=True)
-            
-            # Section 3: Trade Setup & Risk Management
-            st.markdown("### 🎯 **Trade Setup & Risk Management**")
-            
-            # Entry price and timing
-            entry_price = price
-            target_price = nearest_resistance
-            stop_loss = nearest_support
-            
-            # Risk/Reward calculation
-            potential_gain = target_price - entry_price
-            potential_loss = entry_price - stop_loss
-            risk_reward = potential_gain / potential_loss if potential_loss > 0 else 0
-            
-            st.markdown("**🎯 Entry Strategy:**")
-            st.write(f"• **Entry Price**: {currency_symbol}{entry_price:.2f}")
-            st.write(f"• **Entry Type**: {entry_type}")
-            st.write(f"• **Best Time**: Market open or breakout")
-            
-            st.markdown("**🎯 Targets & Stops:**")
-            gain_pct = (potential_gain / entry_price) * 100
-            loss_pct = (potential_loss / entry_price) * 100
-            
-            st.write(f"• **Target 1**: {currency_symbol}{target_price:.2f} (+{gain_pct:.1f}%)")
-            if len(resistance_levels) > 1:
-                target2 = sorted(resistance_levels)[1] if len(resistance_levels) > 1 else target_price * 1.05
-                gain2_pct = ((target2 - entry_price) / entry_price) * 100
-                st.write(f"• **Target 2**: {currency_symbol}{target2:.2f} (+{gain2_pct:.1f}%)")
-            
-            st.write(f"• **Stop Loss**: {currency_symbol}{stop_loss:.2f} (-{loss_pct:.1f}%)")
-            
-            # Position sizing suggestion
-            st.markdown("**💰 Position Sizing:**")
-            risk_per_trade = 2  # 2% risk per trade
-            account_size = 10000  # Base calculation
-            max_loss = account_size * (risk_per_trade / 100)
-            shares = int(max_loss / potential_loss) if potential_loss > 0 else 10
-            
-            st.write(f"• **Suggested Size**: {shares} shares")
-            st.write(f"• **Investment**: {currency_symbol}{shares * entry_price:,.0f}")
-            st.write(f"• **Max Risk**: {currency_symbol}{max_loss:.0f} ({risk_per_trade}%)")
-            
-            # Enhanced Profit/Loss Calculations
-            st.markdown("---")
-            st.markdown("**💰 Profit/Loss Projections:**")
-            
-            # Target 1 P&L
-            target1_profit = shares * (target_price - entry_price)
-            target1_profit_pct = ((target_price - entry_price) / entry_price) * 100
-            
-            # Target 2 P&L (if exists)
-            if len(resistance_levels) > 1:
-                target2 = sorted(resistance_levels)[1] if len(resistance_levels) > 1 else target_price * 1.05
-                target2_profit = shares * (target2 - entry_price)
-                target2_profit_pct = ((target2 - entry_price) / entry_price) * 100
-            
-            # Stop Loss P&L
-            stop_loss_amount = shares * (stop_loss - entry_price)
-            stop_loss_pct = ((stop_loss - entry_price) / entry_price) * 100
-            
-            # Display projections
-            st.markdown("**🎯 If Target 1 Hit:**")
-            profit_color = "🟢" if target1_profit > 0 else "🔴"
-            st.write(f"{profit_color} **Profit**: {currency_symbol}{target1_profit:,.0f} (+{target1_profit_pct:.1f}%)")
-            st.write(f"📈 **Total Value**: {currency_symbol}{(shares * entry_price) + target1_profit:,.0f}")
-            
-            if len(resistance_levels) > 1:
-                st.markdown("**🎯 If Target 2 Hit:**")
-                profit2_color = "🟢" if target2_profit > 0 else "🔴"
-                st.write(f"{profit2_color} **Profit**: {currency_symbol}{target2_profit:,.0f} (+{target2_profit_pct:.1f}%)")
-                st.write(f"📈 **Total Value**: {currency_symbol}{(shares * entry_price) + target2_profit:,.0f}")
-            
-            st.markdown("**🛑 If Stop Loss Hit:**")
-            loss_color = "🔴"
-            st.write(f"{loss_color} **Loss**: {currency_symbol}{stop_loss_amount:,.0f} ({stop_loss_pct:.1f}%)")
-            st.write(f"📉 **Total Value**: {currency_symbol}{(shares * entry_price) + stop_loss_amount:,.0f}")
-            
-            # Summary box
-            st.markdown("---")
-            st.markdown("**📊 Risk/Reward Summary:**")
-            best_case = target2_profit if len(resistance_levels) > 1 else target1_profit
-            worst_case = abs(stop_loss_amount)
-            actual_risk_reward = best_case / worst_case if worst_case > 0 else 0
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("🟢 Best Case", f"{currency_symbol}{best_case:,.0f}")
-            with col2:
-                st.metric("🔴 Worst Case", f"-{currency_symbol}{worst_case:,.0f}")
-            
-            rr_display_color = "🟢" if actual_risk_reward >= 2 else "🟡" if actual_risk_reward >= 1.5 else "🔴"
-            st.write(f"{rr_display_color} **Actual R/R Ratio**: {actual_risk_reward:.1f}:1")
-            
-            # Detailed Justification Section
-            st.markdown("---")
-            st.markdown("### 📝 **Analysis Justification**")
-            
-            # Price chart visualization (text-based)
-            with st.expander("📈 **Price Chart & Levels**", expanded=False):
-                    # Create a simple text-based chart showing price relative to support/resistance
-                    support_levels = selected_stock.get('support_levels', [nearest_support])
-                    resistance_levels = selected_stock.get('resistance_levels', [nearest_resistance])
-                    
-                    chart_data = []
-                    
-                    # Add resistance levels
-                    for i, level in enumerate(sorted(resistance_levels, reverse=True)[:3]):
-                        distance = ((level - price) / price) * 100
-                        strength = "🔴🔴🔴" if i == 0 else "🔴🔴" if i == 1 else "🔴"
-                        chart_data.append((level, f"{strength} Resistance", distance))
-                    
-                    # Add current price
-                    chart_data.append((price, "💙 CURRENT PRICE", 0))
-                    
-                    # Add support levels
-                    for i, level in enumerate(sorted(support_levels, reverse=True)[:3]):
-                        distance = ((price - level) / price) * 100
-                        strength = "🟢🟢🟢" if i == 0 else "🟢🟢" if i == 1 else "🟢"
-                        chart_data.append((level, f"{strength} Support", distance))
-                    
-                    # Sort by price (highest to lowest)
-                    chart_data.sort(key=lambda x: x[0], reverse=True)
-                    
-                    # Display chart
-                    st.markdown("**Price Levels Chart:**")
-                    for level_price, level_type, distance in chart_data:
-                        if "CURRENT" in level_type:
-                            st.markdown(f"**{currency_symbol}{level_price:.2f}** ← {level_type}")
-                        else:
-                            st.markdown(f"{currency_symbol}{level_price:.2f} {level_type} ({abs(distance):+.1f}%)")
-                    
-                    # Add Bollinger Bands if available
-                    bollinger = selected_stock.get('bollinger_bands')
-                    if bollinger:
-                        st.markdown("**📊 Bollinger Bands:**")
-                        st.markdown(f"• Upper Band: {currency_symbol}{bollinger['upper']:.2f}")
-                        st.markdown(f"• Middle Band: {currency_symbol}{bollinger['middle']:.2f}")
-                        st.markdown(f"• Lower Band: {currency_symbol}{bollinger['lower']:.2f}")
-                        
-                        # Position within bands
-                        bb_position = ((price - bollinger['lower']) / (bollinger['upper'] - bollinger['lower'])) * 100
-                        if bb_position > 80:
-                            st.warning(f"⚠️ Price at {bb_position:.0f}% of Bollinger Band range (overbought)")
-                        elif bb_position < 20:
-                            st.success(f"✅ Price at {bb_position:.0f}% of Bollinger Band range (oversold)")
-                        else:
-                            st.info(f"📊 Price at {bb_position:.0f}% of Bollinger Band range (normal)")
-            
-            # Create justification based on the signals and analysis
-            justification_points = []
-            
-            # Technical strength points
-            if score >= 80:
-                justification_points.append("🟢 **Very Strong Setup**: Multiple technical indicators align for high-probability trade")
-            elif score >= 60:
-                justification_points.append("🟡 **Good Setup**: Several positive technical signals present")
-            else:
-                justification_points.append("🔴 **Caution**: Mixed signals, consider smaller position size")
-            
-            # Support/Resistance justification
-            if entry_type == "Support Bounce":
-                justification_points.append(f"🎯 **Support Bounce Play**: Price testing strong support at {currency_symbol}{nearest_support:.2f}")
-            elif entry_type == "Resistance Break":
-                justification_points.append(f"🚀 **Breakout Play**: Price breaking above resistance at {currency_symbol}{nearest_resistance:.2f}")
-            elif entry_type == "Pullback Entry":
-                justification_points.append("📈 **Pullback Entry**: Healthy correction in uptrend offers good entry")
-            
-            # Risk management justification
-            if risk_reward >= 2:
-                justification_points.append(f"✅ **Excellent Risk/Reward**: {risk_reward:.1f}:1 ratio exceeds minimum 2:1 requirement")
-            elif risk_reward >= 1.5:
-                justification_points.append(f"✅ **Good Risk/Reward**: {risk_reward:.1f}:1 ratio meets trading criteria")
-            else:
-                justification_points.append(f"⚠️ **Marginal Risk/Reward**: {risk_reward:.1f}:1 ratio below optimal, consider smaller size")
-            
-            # Market context
-            justification_points.append(f"🌍 **Market Context**: {market_name} market conditions favor this setup type")
-            
-            # Volume and momentum
-            if volume_trend == "High":
-                justification_points.append("📊 **Volume Confirmation**: High volume supports the price movement")
-            
-            # Technical indicator alignment
-            if rsi_signal == "Neutral":
-                justification_points.append("📈 **RSI Favorable**: RSI in healthy range, room for movement")
-            
-            # Display justification points
-            for point in justification_points:
-                st.markdown(f"• {point}")
-            
-            # Risk warnings
-            st.markdown("**⚠️ Risk Considerations:**")
-            risk_warnings = []
-            
-            if rsi > 70:
-                risk_warnings.append("RSI overbought - watch for potential reversal")
-            if resistance_distance <= 2:
-                risk_warnings.append("Very close to resistance - limited upside")
-            if volume_trend == "Low":
-                risk_warnings.append("Low volume - lack of conviction in move")
-            
-            if risk_warnings:
-                for warning in risk_warnings:
-                    st.markdown(f"• 🔴 {warning}")
-            else:
-                st.markdown("• ✅ No major risk flags identified")
-            
-            # Ultra-Fast Scanner Analysis Summary (Consistent with main results)
-            with st.expander("⚡ **Ultra-Fast Scanner Analysis Details**", expanded=False):
-                st.markdown("### � Ultra-Fast Scanner Analysis")
-                
-                # Use the same scoring system as the main scanner for consistency
-                scanner_score = selected_stock['swing_score']
-                scanner_recommendation = selected_stock['recommendation']
-                
-                # Score breakdown based on ultra-fast scanner algorithm
-                score_color = "🟢" if scanner_score >= 75 else "🟡" if scanner_score >= 65 else "🔴"
-                st.markdown(f"**Ultra-Fast Score:** {score_color} {scanner_score}/100")
-                st.markdown(f"**Recommendation:** {scanner_recommendation}")
-                
-                # Score component breakdown (matching HighPerformanceScanner algorithm)
-                st.markdown("**Score Components:**")
-                base_score = 50
-                st.write(f"• **Base Score**: {base_score}")
-                
-                # Estimate components based on final score
-                trend_component = min(max((scanner_score - base_score) * 0.3, -15), 15)
-                rsi_component = min(max((scanner_score - base_score) * 0.3, -15), 15) 
-                volume_component = min(max((scanner_score - base_score) * 0.2, -10), 10)
-                momentum_component = scanner_score - base_score - trend_component - rsi_component - volume_component
-                
-                trend_color = "🟢" if trend_component > 0 else "🔴" if trend_component < 0 else "🟡"
-                rsi_color = "🟢" if rsi_component > 0 else "🔴" if rsi_component < 0 else "🟡"
-                volume_color = "🟢" if volume_component > 0 else "🔴" if volume_component < 0 else "🟡"
-                momentum_color = "🟢" if momentum_component > 0 else "🔴" if momentum_component < 0 else "🟡"
-                
-                st.write(f"• **Trend Analysis**: {trend_color} {trend_component:+.0f} points")
-                st.write(f"• **RSI Component**: {rsi_color} {rsi_component:+.0f} points") 
-                st.write(f"• **Volume Analysis**: {volume_color} {volume_component:+.0f} points")
-                st.write(f"• **Momentum**: {momentum_color} {momentum_component:+.0f} points")
-                
-                # Recommendation logic explanation
-                st.markdown("**Recommendation Logic:**")
-                if scanner_score >= 75:
-                    st.success("✅ STRONG BUY: Score ≥ 75 with strong technical signals")
-                elif scanner_score >= 65:
-                    st.info("🟡 BUY: Score ≥ 65 with good technical setup")
-                elif scanner_score >= 55:
-                    st.warning("⚠️ WEAK BUY: Score ≥ 55 with average setup")
-                else:
-                    st.error("� HOLD: Score < 55 with weak signals")
-                
-                # Ultra-fast scanner advantages
-                st.markdown("**Ultra-Fast Scanner Benefits:**")
-                st.write("• ⚡ Real-time analysis of 440+ stocks in ~45 seconds")
-                st.write("• 📊 Consistent scoring across all markets")
-                st.write("• 🎯 Optimized for swing trading setups") 
-                st.write("• 💨 No contradictory analysis systems")
-                
-                st.info("💡 **Note**: This analysis uses the same ultra-fast algorithm that found this opportunity, ensuring consistency with the main scanner results.")
-                
-                # Trading plan summary
-                st.markdown("---")
-                col_plan1, col_plan2 = st.columns(2)
-                
-                with col_plan1:
-                    st.markdown("**📋 Action Plan:**")
-                    st.markdown(f"1. **Enter** at {currency_symbol}{entry_price:.2f}")
-                    st.markdown(f"2. **Set stop** at {currency_symbol}{stop_loss:.2f}")
-                    st.markdown(f"3. **Target 1** at {currency_symbol}{target_price:.2f}")
-                    st.markdown(f"4. **Trail stop** as price advances")
-                
-                with col_plan2:
-                    st.markdown("**⏰ Timing:**")
-                    st.markdown("• Best entry: Market open or on breakout")
-                    st.markdown("• Monitor: Every 4-6 hours")
-                    st.markdown("• Hold time: 2-10 days typical")
-                    st.markdown("• Review: Daily after market close")
-                
-                # Quick action buttons for this stock
-                st.markdown("---")
-                
-                # Enhanced Buy/Sell System with Profit/Loss Confirmation
-                st.markdown("### 💱 **Trade Execution**")
-                
-                # Initialize session state for trade confirmation
-                trade_key = f"trade_confirm_{symbol}"
-                if trade_key not in st.session_state:
-                    st.session_state[trade_key] = {"mode": None, "quantity": 0, "show_confirmation": False}
-                
-                trade_state = st.session_state[trade_key]
-                
-                # Buy Section
-                st.markdown("**🟢 Buy Order**")
-                buy_col1, buy_col2 = st.columns([1, 1])
-                
-                with buy_col1:
-                    buy_quantity = st.number_input(
-                        "Shares to buy:",
-                        min_value=1,
-                        max_value=10000,
-                        value=shares,  # Default to recommended quantity
-                        step=1,
-                        key=f"buy_input_{symbol}"
-                    )
-                
-                with buy_col2:
-                    if st.button(f"🟢 PREVIEW BUY", key=f"preview_buy_{symbol}", type="primary"):
-                        trade_state["mode"] = "buy"
-                        trade_state["quantity"] = buy_quantity
-                        trade_state["show_confirmation"] = True
-                
-                # Show Buy Confirmation with Profit/Loss Projections
-                if trade_state["show_confirmation"] and trade_state["mode"] == "buy":
-                    st.markdown("---")
-                    st.markdown("**🔍 Buy Order Confirmation**")
-                    
-                    # Calculate projections for custom quantity
-                    custom_investment = buy_quantity * entry_price
-                    custom_target1_profit = buy_quantity * (target_price - entry_price)
-                    custom_target1_total = custom_investment + custom_target1_profit
-                    custom_stop_loss = buy_quantity * (stop_loss - entry_price)
-                    custom_stop_total = custom_investment + custom_stop_loss
-                    
-                    # Enhanced projections for second target if available
-                    if len(resistance_levels) > 1:
-                        target2 = sorted(resistance_levels)[1] if len(resistance_levels) > 1 else target_price * 1.05
-                        custom_target2_profit = buy_quantity * (target2 - entry_price)
-                        custom_target2_total = custom_investment + custom_target2_profit
-                    
-                    # Display order summary
-                    order_col1, order_col2 = st.columns([1, 1])
-                    
-                    with order_col1:
-                        st.info(f"""
-                        **📋 Order Summary:**
-                        • Symbol: {symbol}
-                        • Quantity: {buy_quantity:,} shares
-                        • Entry Price: {currency_symbol}{entry_price:.2f}
-                        • Total Investment: {currency_symbol}{custom_investment:,.0f}
-                        """)
-                    
-                    with order_col2:
-                        st.warning(f"""
-                        **🎯 Profit/Loss Projections:**
-                        
-                        **Target 1 ({currency_symbol}{target_price:.2f}):**
-                        🟢 Profit: {currency_symbol}{custom_target1_profit:,.0f}
-                        📈 Total: {currency_symbol}{custom_target1_total:,.0f}
-                        
-                        **Stop Loss ({currency_symbol}{stop_loss:.2f}):**
-                        🔴 Loss: {currency_symbol}{custom_stop_loss:,.0f}
-                        📉 Total: {currency_symbol}{custom_stop_total:,.0f}
-                        """)
-                    
-                    # Show second target if available
-                    if len(resistance_levels) > 1:
-                        st.success(f"""
-                        **🚀 Target 2 ({currency_symbol}{target2:.2f}):**
-                        🟢 Max Profit: {currency_symbol}{custom_target2_profit:,.0f}
-                        📈 Total: {currency_symbol}{custom_target2_total:,.0f}
-                        """)
-                    
-                    # Confirm/Cancel buttons
-                    confirm_col1, confirm_col2, confirm_col3 = st.columns([1, 1, 1])
-                    
-                    with confirm_col1:
-                        if st.button(f"✅ CONFIRM BUY", key=f"confirm_buy_{symbol}", type="primary"):
-                            result = dashboard.portfolio.buy_stock(symbol, price, confidence=score, shares=buy_quantity)
-                            if result['success']:
-                                st.success(f"✅ {result['message']}")
-                                # Store successful trade in session state
-                                if 'recent_trades' not in st.session_state:
-                                    st.session_state.recent_trades = []
-                                st.session_state.recent_trades.append(f"Bought {buy_quantity} shares of {symbol}")
-                                # Clear swing data to force refresh on next manual refresh
-                                st.session_state.swing_data = None
-                                # Reset trade state
-                                trade_state["show_confirmation"] = False
-                                trade_state["mode"] = None
-                            else:
-                                st.error(f"❌ {result['message']}")
-                    
-                    with confirm_col2:
-                        if st.button(f"❌ CANCEL", key=f"cancel_buy_{symbol}"):
-                            trade_state["show_confirmation"] = False
-                            trade_state["mode"] = None
-                            st.info("Buy order cancelled")
-                    
-                    with confirm_col3:
-                        st.caption("Review the projections before confirming")
-                
-                # Check if user already owns this stock for selling
-                portfolio_positions = dashboard.portfolio.get_current_positions()
-                owned_shares = 0
-                avg_cost = 0
-                
-                for pos in portfolio_positions:
-                    if pos['symbol'] == symbol:
-                        owned_shares = pos['shares']
-                        avg_cost = pos['avg_price']
-                        break
-                
-                if owned_shares > 0:
-                    st.markdown("---")
-                    st.markdown("**🔴 Sell Order**")
-                    st.info(f"You own {owned_shares:.0f} shares at avg cost {currency_symbol}{avg_cost:.2f}")
-                    
-                    sell_col1, sell_col2 = st.columns([1, 1])
-                    
-                    with sell_col1:
-                        sell_quantity = st.number_input(
-                            "Shares to sell:",
-                            min_value=1,
-                            max_value=int(owned_shares),
-                            value=min(int(owned_shares), 100),
-                            step=1,
-                            key=f"sell_input_{symbol}"
-                        )
-                    
-                    with sell_col2:
-                        if st.button(f"🔴 PREVIEW SELL", key=f"preview_sell_{symbol}", type="secondary"):
-                            trade_state["mode"] = "sell"
-                            trade_state["quantity"] = sell_quantity
-                            trade_state["show_confirmation"] = True
-                    
-                    # Show Sell Confirmation with Profit/Loss
-                    if trade_state["show_confirmation"] and trade_state["mode"] == "sell":
-                        st.markdown("---")
-                        st.markdown("**🔍 Sell Order Confirmation**")
-                        
-                        # Calculate sell projections
-                        sell_proceeds = sell_quantity * price
-                        cost_basis = sell_quantity * avg_cost
-                        total_pnl = sell_proceeds - cost_basis
-                        pnl_pct = (total_pnl / cost_basis) * 100 if cost_basis > 0 else 0
-                        
-                        # Display sell summary
-                        sell_sum_col1, sell_sum_col2 = st.columns([1, 1])
-                        
-                        with sell_sum_col1:
-                            st.info(f"""
-                            **📋 Sell Order Summary:**
-                            • Symbol: {symbol}
-                            • Quantity: {sell_quantity:,} shares
-                            • Current Price: {currency_symbol}{price:.2f}
-                            • Avg Cost: {currency_symbol}{avg_cost:.2f}
-                            • Proceeds: {currency_symbol}{sell_proceeds:,.0f}
-                            """)
-                        
-                        with sell_sum_col2:
-                            pnl_color = "success" if total_pnl >= 0 else "error"
-                            pnl_emoji = "🟢" if total_pnl >= 0 else "🔴"
-                            
-                            if pnl_color == "success":
-                                st.success(f"""
-                                **💰 Profit/Loss Summary:**
-                                {pnl_emoji} **Total P&L: {currency_symbol}{total_pnl:,.0f}**
-                                📊 Return: {pnl_pct:+.1f}%
-                                💵 Cost Basis: {currency_symbol}{cost_basis:,.0f}
-                                💸 Proceeds: {currency_symbol}{sell_proceeds:,.0f}
-                                """)
-                            else:
-                                st.error(f"""
-                                **💰 Profit/Loss Summary:**
-                                {pnl_emoji} **Total P&L: {currency_symbol}{total_pnl:,.0f}**
-                                📊 Return: {pnl_pct:+.1f}%
-                                💵 Cost Basis: {currency_symbol}{cost_basis:,.0f}
-                                💸 Proceeds: {currency_symbol}{sell_proceeds:,.0f}
-                                """)
-                        
-                        # Confirm/Cancel sell buttons
-                        sell_confirm_col1, sell_confirm_col2, sell_confirm_col3 = st.columns([1, 1, 1])
-                        
-                        with sell_confirm_col1:
-                            if st.button(f"✅ CONFIRM SELL", key=f"confirm_sell_{symbol}", type="primary"):
-                                result = dashboard.portfolio.sell_stock(symbol, price, shares=sell_quantity)
-                                if result['success']:
-                                    pnl_msg = f"Profit: {currency_symbol}{total_pnl:,.0f}" if total_pnl >= 0 else f"Loss: {currency_symbol}{abs(total_pnl):,.0f}"
-                                    st.success(f"✅ {result['message']} | {pnl_msg}")
-                                    # Store successful trade in session state
-                                    if 'recent_trades' not in st.session_state:
-                                        st.session_state.recent_trades = []
-                                    st.session_state.recent_trades.append(f"Sold {sell_quantity} shares of {symbol} for {pnl_msg}")
-                                    # Clear swing data to force refresh on next manual refresh
-                                    st.session_state.swing_data = None
-                                    # Reset trade state
-                                    trade_state["show_confirmation"] = False
-                                    trade_state["mode"] = None
-                                else:
-                                    st.error(f"❌ {result['message']}")
-                        
-                        with sell_confirm_col2:
-                            if st.button(f"❌ CANCEL", key=f"cancel_sell_{symbol}"):
-                                trade_state["show_confirmation"] = False
-                                trade_state["mode"] = None
-                                st.info("Sell order cancelled")
-                        
-                        with sell_confirm_col3:
-                            st.caption("Review P&L before confirming")
-    
-    else:
-        st.info("No swing opportunities available for detailed analysis at this time.")
+            try:
+                # Use the master analyzer directly
+                results = dashboard.analyzer.get_daily_swing_signals(progress_callback)
+                st.session_state.swing_data = results
+                progress_bar.progress(1.0, text="Scan complete!")
+                time.sleep(1) # Keep message on screen
+                progress_bar.empty()
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Scan failed: {e}")
+                progress_bar.empty()
 
+    with col_refresh2:
+        if st.session_state.last_scan_time:
+            st.info(f"Last scan: {st.session_state.last_scan_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
-def show_portfolio(dashboard):
-    """Display portfolio overview - Mobile responsive"""
-    st.header("💼 Portfolio Overview")
+    # Display results
+    if st.session_state.swing_data:
+        results = st.session_state.swing_data
+        
+        st.subheader("Scan Summary")
+        summary_cols = st.columns(3)
+        summary_cols[0].metric("Total Stocks Scanned", results['total_stocks_scanned'])
+        summary_cols[1].metric("Total Scan Duration", f"{results['scan_duration']:.1f}s")
+        
+        for market_key, market_data in results['markets'].items():
+            if selected_market != "All Markets" and market_data['name'] != selected_market:
+                continue
+
+            st.markdown(f"### {market_data['name']} Top 5 Results")
+            
+            if not market_data['top_5']:
+                st.warning(f"No stocks found for {market_data['name']}.")
+                continue
+
+            df = pd.DataFrame(market_data['top_5'])
+            
+            # Format for display
+            df_display = pd.DataFrame()
+            df_display['Symbol'] = df['symbol']
+            df_display['Price'] = df['current_price'].map('{:,.2f}'.format)
+            df_display['Score'] = df['swing_score']
+            df_display['Recommendation'] = df['recommendation']
+            df_display['Risk'] = df['risk_level']
+            df_display['Confidence'] = df['confidence']
+            
+            st.dataframe(df_display.style.apply(style_rows, axis=1), use_container_width=True)
+
+            # Detailed view for each of the top 5
+            for index, row in df.iterrows():
+                with st.expander(f"🔍 Detailed Analysis for {row['symbol']}"):
+                    display_detailed_analysis(row)
+    else:
+        st.info("Click 'Scan All Markets' to get the latest swing trading signals.")
+
+def display_detailed_analysis(stock_data):
+    """Displays a detailed breakdown of a stock's analysis."""
+    cols = st.columns([2, 3])
     
+    with cols[0]:
+        st.metric("Swing Score", f"{stock_data['swing_score']}/100")
+        st.metric("Recommendation", stock_data['recommendation'])
+        st.metric("Risk Level", stock_data['risk_level'])
+        st.metric("Confidence", stock_data['confidence'])
+
+    with cols[1]:
+        st.markdown("**Technical Analysis**")
+        tech = stock_data['technical_indicators']
+        st.text(f"RSI: {tech['rsi']['value']:.1f} ({tech['rsi']['status']})")
+        st.text(f"MACD: {tech['macd']['status']}")
+        st.text(f"Trend Strength (ADX): {tech['adx']['trend_strength']}")
+        st.text(f"Volume (OBV): {tech['volume_analysis']['obv_trend']}")
+        
+        st.markdown("**Risk Management**")
+        risk = stock_data['risk_management']
+        st.text(f"Stop Loss: {risk['stop_loss']:.2f}")
+        st.text(f"Target 1: {risk['target_1']:.2f}")
+        st.text(f"Risk/Reward: {risk['risk_reward_ratio']}")
+
+def style_rows(row):
+    """Style dataframe rows based on recommendation"""
+    if 'BUY' in row['Recommendation']:
+        return ['background-color: #2E7D32'] * len(row) # Dark Green
+    elif 'SELL' in row['Recommendation']:
+        return ['background-color: #C62828'] * len(row) # Dark Red
+    elif 'HOLD' in row['Recommendation']:
+        return ['background-color: #FF8F00'] * len(row) # Amber
+    else: # AVOID
+        return ['background-color: #455A64'] * len(row) # Blue Grey
+
+def main():
+    dashboard = TradingDashboard()
+    
+    # Sidebar
+    st.sidebar.title("🎯 Trading Controls")
+    
+    # Show logout option in sidebar
+    show_logout_option()
+    
+    # Mobile view toggle
+    show_mobile_toggle()
+    
+    # Market selection
+    selected_market = st.sidebar.selectbox(
+        "Select Market",
+        ["All Markets", "🇺🇸 USA", "🇮🇳 India", "🇲🇾 Malaysia"]
+    )
+    
+    # Refresh button
+    if st.sidebar.button("🔄 Refresh Data", type="primary"):
+        st.cache_data.clear()
+        # Force reload portfolio from disk
+        dashboard.portfolio = PaperTradingPortfolio(initial_capital=TRADING_CONFIG['initial_capital'])
+        st.success("✅ Data refreshed!")
+        st.rerun()
+    
+    # Portfolio actions
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 📊 Portfolio Actions")
+    
+    if st.sidebar.button("📈 Update Positions"):
+        dashboard.portfolio.update_positions()
+        # Reload portfolio from disk to ensure fresh data
+        dashboard.portfolio = PaperTradingPortfolio(initial_capital=TRADING_CONFIG['initial_capital'])
+        st.sidebar.success("Positions updated!")
+    
+    # Main content
+    st.title("📈 Swing Trading Dashboard")
+    st.markdown("*Real-time signals, portfolio tracking, and performance analytics*")
+    
+    # Main tabs
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "🎯 Live Signals", 
+        "💼 Portfolio", 
+        "📊 Analytics",
+        "🏆 Performance",
+        "📜 Trade History",
+        "⚙️ Settings"
+    ])
+    
+    with tab1:
+        show_live_signals(dashboard, selected_market)
+    
+    with tab2:
+        show_portfolio(dashboard)
+    
+    with tab3:
+        show_performance(dashboard)
+    
+    with tab4:
+        show_charts(dashboard)
+    
+    with tab5:
+        show_trade_history(dashboard)
+    
+    with tab6:
+        show_portfolio_settings(dashboard)
+
+@st.cache_data(ttl=300)  # Cache for 5 minutes
+def get_market_signals(market_filter):
+    """Get signals for selected market"""
+    dashboard = TradingDashboard()
+    
+    if market_filter == "All Markets":
+        markets = get_comprehensive_market_watchlists()
+    elif market_filter == "🇺🇸 USA":
+        watchlists = get_comprehensive_market_watchlists()
+        markets = {"usa": watchlists["usa"]}
+    elif market_filter == "🇮🇳 India":
+        watchlists = get_comprehensive_market_watchlists()
+        markets = {"india": watchlists["india"]}
+    elif market_filter == "🇲🇾 Malaysia":
+        watchlists = get_comprehensive_market_watchlists()
+        markets = {"malaysia": watchlists["malaysia"]}
+
+    all_signals = []
+    processed_symbols = set()  # Track processed symbols to avoid duplicates
+    
+    for market_name, symbols in markets.items():
+        for symbol in symbols[:8]:  # Limit to 8 stocks per market for performance
+            if symbol in processed_symbols:
+                continue
+            processed_symbols.add(symbol)
+            
+            analysis = dashboard.get_stock_analysis(symbol)
+            if analysis:
+                signals = analysis['signals']
+                latest = analysis['latest']
+                
+                # Determine currency and price display
+                if symbol.endswith('.NS') or symbol.endswith('.BO'):
+                    currency = 'INR'
+                    # yfinance already provides Indian stocks in INR
+                    price_display = f"₹{latest['Close']:,.2f}"
+                    raw_price = latest['Close']
+                elif symbol.endswith('.KL'):
+                    currency = 'MYR'
+                    # yfinance already provides Malaysian stocks in MYR
+                    price_display = f"RM{latest['Close']:,.2f}"
+                    raw_price = latest['Close']
+                else:
+                    currency = 'USD'
+                    price_display = f"${latest['Close']:,.2f}"
+                    raw_price = latest['Close']
+                
+                all_signals.append({
+                    'Symbol': symbol,
+                    'Market': market_name.title(),
+                    'Price': price_display,
+                    'Price_Raw': raw_price,
+                    'Currency': currency,
+                    'Signal': signals['recommendation'],
+                    'Confidence': f"{signals['confidence']}%",
+                    'RSI': f"{signals['rsi']:.1f}",
+                    'Trend': '📈' if signals['sma_bullish'] else '📉',
+                    'MACD': '🟢' if signals['macd_bullish'] else '🔴',
+                    'BB_Position': signals['bb_position'],
+                    'confidence_num': signals['confidence']
+                })
+    
+    return all_signals
+
+def show_live_signals(dashboard, selected_market):
+    """Display enhanced swing trading signals with portfolio analysis"""
+    st.header("🎯 Daily Swing Trading Signals")
+    
+    # Initialize session state for swing data if not exists
+    if 'swing_data' not in st.session_state:
+        st.session_state.swing_data = None
+        st.session_state.last_scan_time = None
+    
+    # Manual refresh controls at the top
+    col_refresh1, col_refresh2 = st.columns([1, 3])
+    
+    with col_refresh1:
+        if st.button("🚀 Scan All Markets", type="primary", help="Run a full scan using the Master Analyzer"):
+            st.session_state.swing_data = None # Clear previous results
+            st.session_state.last_scan_time = datetime.now()
+            
+            progress_bar = st.progress(0, text="Initializing scan...")
+            
+            def progress_callback(message, progress):
+                progress_bar.progress(progress, text=message)
+
+            try:
+                # Use the master analyzer directly
+                results = dashboard.analyzer.get_daily_swing_signals(progress_callback)
+                st.session_state.swing_data = results
+                progress_bar.progress(1.0, text="Scan complete!")
+                time.sleep(1) # Keep message on screen
+                progress_bar.empty()
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Scan failed: {e}")
+                progress_bar.empty()
+
+    with col_refresh2:
+        if st.session_state.last_scan_time:
+            st.info(f"Last scan: {st.session_state.last_scan_time.strftime('%Y-%m-%d %H:%M:%S')}")
+
+    # Display results
+    if st.session_state.swing_data:
+        results = st.session_state.swing_data
+        
+        st.subheader("Scan Summary")
+        summary_cols = st.columns(3)
+        summary_cols[0].metric("Total Stocks Scanned", results['total_stocks_scanned'])
+        summary_cols[1].metric("Total Scan Duration", f"{results['scan_duration']:.1f}s")
+        
+        for market_key, market_data in results['markets'].items():
+            if selected_market != "All Markets" and market_data['name'] != selected_market:
+                continue
+
+            st.markdown(f"### {market_data['name']} Top 5 Results")
+            
+            if not market_data['top_5']:
+                st.warning(f"No stocks found for {market_data['name']}.")
+                continue
+
+            df = pd.DataFrame(market_data['top_5'])
+            
+            # Format for display
+            df_display = pd.DataFrame()
+            df_display['Symbol'] = df['symbol']
+            df_display['Price'] = df['current_price'].map('{:,.2f}'.format)
+            df_display['Score'] = df['swing_score']
+            df_display['Recommendation'] = df['recommendation']
+            df_display['Risk'] = df['risk_level']
+            df_display['Confidence'] = df['confidence']
+            
+            st.dataframe(df_display.style.apply(style_rows, axis=1), use_container_width=True)
+
+            # Detailed view for each of the top 5
+            for index, row in df.iterrows():
+                with st.expander(f"🔍 Detailed Analysis for {row['symbol']}"):
+                    display_detailed_analysis(row)
+    else:
+        st.info("Click 'Scan All Markets' to get the latest swing trading signals.")
+
+def display_detailed_analysis(stock_data):
+    """Displays a detailed breakdown of a stock's analysis."""
+    cols = st.columns([2, 3])
+    
+    with cols[0]:
+        st.metric("Swing Score", f"{stock_data['swing_score']}/100")
+        st.metric("Recommendation", stock_data['recommendation'])
+        st.metric("Risk Level", stock_data['risk_level'])
+        st.metric("Confidence", stock_data['confidence'])
+
+    with cols[1]:
+        st.markdown("**Technical Analysis**")
+        tech = stock_data['technical_indicators']
+        st.text(f"RSI: {tech['rsi']['value']:.1f} ({tech['rsi']['status']})")
+        st.text(f"MACD: {tech['macd']['status']}")
+        st.text(f"Trend Strength (ADX): {tech['adx']['trend_strength']}")
+        st.text(f"Volume (OBV): {tech['volume_analysis']['obv_trend']}")
+        
+        st.markdown("**Risk Management**")
+        risk = stock_data['risk_management']
+        st.text(f"Stop Loss: {risk['stop_loss']:.2f}")
+        st.text(f"Target 1: {risk['target_1']:.2f}")
+        st.text(f"Risk/Reward: {risk['risk_reward_ratio']}")
+
+def style_rows(row):
+    """Style dataframe rows based on recommendation"""
+    if 'BUY' in row['Recommendation']:
+        return ['background-color: #2E7D32'] * len(row) # Dark Green
+    elif 'SELL' in row['Recommendation']:
+        return ['background-color: #C62828'] * len(row) # Dark Red
+    elif 'HOLD' in row['Recommendation']:
+        return ['background-color: #FF8F00'] * len(row) # Amber
+    else: # AVOID
+        return ['background-color: #455A64'] * len(row) # Blue Grey
+
+def main():
+    dashboard = TradingDashboard()
+    
+    # Sidebar
+    st.sidebar.title("🎯 Trading Controls")
+    
+    # Show logout option in sidebar
+    show_logout_option()
+    
+    # Mobile view toggle
+    show_mobile_toggle()
+    
+    # Market selection
+    selected_market = st.sidebar.selectbox(
+        "Select Market",
+        ["All Markets", "🇺🇸 USA", "🇮🇳 India", "🇲🇾 Malaysia"]
+    )
+    
+    # Refresh button
+    if st.sidebar.button("🔄 Refresh Data", type="primary"):
+        st.cache_data.clear()
+        # Force reload portfolio from disk
+        dashboard.portfolio = PaperTradingPortfolio(initial_capital=TRADING_CONFIG['initial_capital'])
+        st.success("✅ Data refreshed!")
+        st.rerun()
+    
+    # Portfolio actions
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 📊 Portfolio Actions")
+    
+    if st.sidebar.button("📈 Update Positions"):
+        dashboard.portfolio.update_positions()
+        # Reload portfolio from disk to ensure fresh data
+        dashboard.portfolio = PaperTradingPortfolio(initial_capital=TRADING_CONFIG['initial_capital'])
+        st.sidebar.success("Positions updated!")
+    
+    # Main content
+    st.title("📈 Swing Trading Dashboard")
+    st.markdown("*Real-time signals, portfolio tracking, and performance analytics*")
+    
+    # Main tabs
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "🎯 Live Signals", 
+        "💼 Portfolio", 
+        "📊 Analytics",
+        "🏆 Performance",
+        "📜 Trade History",
+        "⚙️ Settings"
+    ])
+    
+    with tab1:
+        show_live_signals(dashboard, selected_market)
+    
+    with tab2:
+        show_portfolio(dashboard)
+    
+    with tab3:
+        show_performance(dashboard)
+    
+    with tab4:
+        show_charts(dashboard)
+    
+    with tab5:
+        show_trade_history(dashboard)
+    
+    with tab6:
+        show_portfolio_settings(dashboard)
+
+@st.cache_data(ttl=300)  # Cache for 5 minutes
+def get_market_signals(market_filter):
+    """Get signals for selected market"""
+    dashboard = TradingDashboard()
+    
+    if market_filter == "All Markets":
+        markets = get_comprehensive_market_watchlists()
+    elif market_filter == "🇺🇸 USA":
+        watchlists = get_comprehensive_market_watchlists()
+        markets = {"usa": watchlists["usa"]}
+    elif market_filter == "🇮🇳 India":
+        watchlists = get_comprehensive_market_watchlists()
+        markets = {"india": watchlists["india"]}
+    elif market_filter == "🇲🇾 Malaysia":
+        watchlists = get_comprehensive_market_watchlists()
+        markets = {"malaysia": watchlists["malaysia"]}
+
+    all_signals = []
+    processed_symbols = set()  # Track processed symbols to avoid duplicates
+    
+    for market_name, symbols in markets.items():
+        for symbol in symbols[:8]:  # Limit to 8 stocks per market for performance
+            if symbol in processed_symbols:
+                continue
+            processed_symbols.add(symbol)
+            
+            analysis = dashboard.get_stock_analysis(symbol)
+            if analysis:
+                signals = analysis['signals']
+                latest = analysis['latest']
+                
+                # Determine currency and price display
+                if symbol.endswith('.NS') or symbol.endswith('.BO'):
+                    currency = 'INR'
+                    # yfinance already provides Indian stocks in INR
+                    price_display = f"₹{latest['Close']:,.2f}"
+                    raw_price = latest['Close']
+                elif symbol.endswith('.KL'):
+                    currency = 'MYR'
+                    # yfinance already provides Malaysian stocks in MYR
+                    price_display = f"RM{latest['Close']:,.2f}"
+                    raw_price = latest['Close']
+                else:
+                    currency = 'USD'
+                    price_display = f"${latest['Close']:,.2f}"
+                    raw_price = latest['Close']
+                
+                all_signals.append({
+                    'Symbol': symbol,
+                    'Market': market_name.title(),
+                    'Price': price_display,
+                    'Price_Raw': raw_price,
+                    'Currency': currency,
+                    'Signal': signals['recommendation'],
+                    'Confidence': f"{signals['confidence']}%",
+                    'RSI': f"{signals['rsi']:.1f}",
+                    'Trend': '📈' if signals['sma_bullish'] else '📉',
+                    'MACD': '🟢' if signals['macd_bullish'] else '🔴',
+                    'BB_Position': signals['bb_position'],
+                    'confidence_num': signals['confidence']
+                })
+    
+    return all_signals
+
+def show_live_signals(dashboard, selected_market):
+    """Display enhanced swing trading signals with portfolio analysis"""
+    st.header("🎯 Daily Swing Trading Signals")
+    
+    # Initialize session state for swing data if not exists
+    if 'swing_data' not in st.session_state:
+        st.session_state.swing_data = None
+        st.session_state.last_scan_time = None
+    
+    # Manual refresh controls at the top
+    col_refresh1, col_refresh2 = st.columns([1, 3])
+    
+    with col_refresh1:
+        if st.button("🚀 Scan All Markets", type="primary", help="Run a full scan using the Master Analyzer"):
+            st.session_state.swing_data = None # Clear previous results
+            st.session_state.last_scan_time = datetime.now()
+            
+            progress_bar = st.progress(0, text="Initializing scan...")
+            
+            def progress_callback(message, progress):
+                progress_bar.progress(progress, text=message)
+
+            try:
+                # Use the master analyzer directly
+                results = dashboard.analyzer.get_daily_swing_signals(progress_callback)
+                st.session_state.swing_data = results
+                progress_bar.progress(1.0, text="Scan complete!")
+                time.sleep(1) # Keep message on screen
+                progress_bar.empty()
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Scan failed: {e}")
+                progress_bar.empty()
+
+    with col_refresh2:
+        if st.session_state.last_scan_time:
+            st.info(f"Last scan: {st.session_state.last_scan_time.strftime('%Y-%m-%d %H:%M:%S')}")
+
+    # Display results
+    if st.session_state.swing_data:
+        results = st.session_state.swing_data
+        
+        st.subheader("Scan Summary")
+        summary_cols = st.columns(3)
+        summary_cols[0].metric("Total Stocks Scanned", results['total_stocks_scanned'])
+        summary_cols[1].metric("Total Scan Duration", f"{results['scan_duration']:.1f}s")
+        
+        for market_key, market_data in results['markets'].items():
+            if selected_market != "All Markets" and market_data['name'] != selected_market:
+                continue
+
+            st.markdown(f"### {market_data['name']} Top 5 Results")
+            
+            if not market_data['top_5']:
+                st.warning(f"No stocks found for {market_data['name']}.")
+                continue
+
+            df = pd.DataFrame(market_data['top_5'])
+            
+            # Format for display
+            df_display = pd.DataFrame()
+            df_display['Symbol'] = df['symbol']
+            df_display['Price'] = df['current_price'].map('{:,.2f}'.format)
+            df_display['Score'] = df['swing_score']
+            df_display['Recommendation'] = df['recommendation']
+            df_display['Risk'] = df['risk_level']
+            df_display['Confidence'] = df['confidence']
+            
+            st.dataframe(df_display.style.apply(style_rows, axis=1), use_container_width=True)
+
+            # Detailed view for each of the top 5
+            for index, row in df.iterrows():
+                with st.expander(f"🔍 Detailed Analysis for {row['symbol']}"):
+                    display_detailed_analysis(row)
+    else:
+        st.info("Click 'Scan All Markets' to get the latest swing trading signals.")
+
+def display_detailed_analysis(stock_data):
+    """Displays a detailed breakdown of a stock's analysis."""
+    cols = st.columns([2, 3])
+    
+    with cols[0]:
+        st.metric("Swing Score", f"{stock_data['swing_score']}/100")
+        st.metric("Recommendation", stock_data['recommendation'])
+        st.metric("Risk Level", stock_data['risk_level'])
+        st.metric("Confidence", stock_data['confidence'])
+
+    with cols[1]:
+        st.markdown("**Technical Analysis**")
+        tech = stock_data['technical_indicators']
+        st.text(f"RSI: {tech['rsi']['value']:.1f} ({tech['rsi']['status']})")
+        st.text(f"MACD: {tech['macd']['status']}")
+        st.text(f"Trend Strength (ADX): {tech['adx']['trend_strength']}")
+        st.text(f"Volume (OBV): {tech['volume_analysis']['obv_trend']}")
+        
+        st.markdown("**Risk Management**")
+        risk = stock_data['risk_management']
+        st.text(f"Stop Loss: {risk['stop_loss']:.2f}")
+        st.text(f"Target 1: {risk['target_1']:.2f}")
+        st.text(f"Risk/Reward: {risk['risk_reward_ratio']}")
+
+def style_rows(row):
+    """Style dataframe rows based on recommendation"""
+    if 'BUY' in row['Recommendation']:
+        return ['background-color: #2E7D32'] * len(row) # Dark Green
+    elif 'SELL' in row['Recommendation']:
+        return ['background-color: #C62828'] * len(row) # Dark Red
+    elif 'HOLD' in row['Recommendation']:
+        return ['background-color: #FF8F00'] * len(row) # Amber
+    else: # AVOID
+        return ['background-color: #455A64'] * len(row) # Blue Grey
+
+def main():
+    dashboard = TradingDashboard()
+    
+    # Sidebar
+    st.sidebar.title("🎯 Trading Controls")
+    
+    # Show logout option in sidebar
+    show_logout_option()
+    
+    # Mobile view toggle
+    show_mobile_toggle()
+    
+    # Market selection
+    selected_market = st.sidebar.selectbox(
+        "Select Market",
+        ["All Markets", "🇺🇸 USA", "🇮🇳 India", "🇲🇾 Malaysia"]
+    )
+    
+    # Refresh button
+    if st.sidebar.button("🔄 Refresh Data", type="primary"):
+        st.cache_data.clear()
+        # Force reload portfolio from disk
+        dashboard.portfolio = PaperTradingPortfolio(initial_capital=TRADING_CONFIG['initial_capital'])
+        st.success("✅ Data refreshed!")
+        st.rerun()
+    
+    # Portfolio actions
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 📊 Portfolio Actions")
+    
+    if st.sidebar.button("📈 Update Positions"):
+        dashboard.portfolio.update_positions()
+        # Reload portfolio from disk to ensure fresh data
+        dashboard.portfolio = PaperTradingPortfolio(initial_capital=TRADING_CONFIG['initial_capital'])
+        st.sidebar.success("Positions updated!")
+    
+    # Main content
+    st.title("📈 Swing Trading Dashboard")
+    st.markdown("*Real-time signals, portfolio tracking, and performance analytics*")
+    
+    # Main tabs
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "🎯 Live Signals", 
+        "💼 Portfolio", 
+        "📊 Analytics",
+        "🏆 Performance",
+        "📜 Trade History",
+        "⚙️ Settings"
+    ])
+    
+    with tab1:
+        show_live_signals(dashboard, selected_market)
+    
+    with tab2:
+        show_portfolio(dashboard)
+    
+    with tab3:
+        show_performance(dashboard)
+    
+    with tab4:
+        show_charts(dashboard)
+    
+    with tab5:
+        show_trade_history(dashboard)
+    
+    with tab6:
+        show_portfolio_settings(dashboard)
+
+@st.cache_data(ttl=300)  # Cache for 5 minutes
+def get_market_signals(market_filter):
+    """Get signals for selected market"""
+    dashboard = TradingDashboard()
+    
+    if market_filter == "All Markets":
+        markets = get_comprehensive_market_watchlists()
+    elif market_filter == "🇺🇸 USA":
+        watchlists = get_comprehensive_market_watchlists()
+        markets = {"usa": watchlists["usa"]}
+    elif market_filter == "🇮🇳 India":
+        watchlists = get_comprehensive_market_watchlists()
+        markets = {"india": watchlists["india"]}
+    elif market_filter == "🇲🇾 Malaysia":
+        watchlists = get_comprehensive_market_watchlists()
+        markets = {"malaysia": watchlists["malaysia"]}
+
+    all_signals = []
+    processed_symbols = set()  # Track processed symbols to avoid duplicates
+    
+    for market_name, symbols in markets.items():
+        for symbol in symbols[:8]:  # Limit to 8 stocks per market for performance
+            if symbol in processed_symbols:
+                continue
+            processed_symbols.add(symbol)
+            
+            analysis = dashboard.get_stock_analysis(symbol)
+            if analysis:
+                signals = analysis['signals']
+                latest = analysis['latest']
+                
+                # Determine currency and price display
+                if symbol.endswith('.NS') or symbol.endswith('.BO'):
+                    currency = 'INR'
+                    # yfinance already provides Indian stocks in INR
+                    price_display = f"₹{latest['Close']:,.2f}"
+                    raw_price = latest['Close']
+                elif symbol.endswith('.KL'):
+                    currency = 'MYR'
+                    # yfinance already provides Malaysian stocks in MYR
+                    price_display = f"RM{latest['Close']:,.2f}"
+                    raw_price = latest['Close']
+                else:
+                    currency = 'USD'
+                    price_display = f"${latest['Close']:,.2f}"
+                    raw_price = latest['Close']
+                
+                all_signals.append({
+                    'Symbol': symbol,
+                    'Market': market_name.title(),
+                    'Price': price_display,
+                    'Price_Raw': raw_price,
+                    'Currency': currency,
+                    'Signal': signals['recommendation'],
+                    'Confidence': f"{signals['confidence']}%",
+                    'RSI': f"{signals['rsi']:.1f}",
+                    'Trend': '📈' if signals['sma_bullish'] else '📉',
+                    'MACD': '🟢' if signals['macd_bullish'] else '🔴',
+                    'BB_Position': signals['bb_position'],
+                    'confidence_num': signals['confidence']
+                })
+    
+    return all_signals
+
+def show_live_signals(dashboard, selected_market):
+    """Display enhanced swing trading signals with portfolio analysis"""
+    st.header("🎯 Daily Swing Trading Signals")
+    
+    # Initialize session state for swing data if not exists
+    if 'swing_data' not in st.session_state:
+        st.session_state.swing_data = None
+        st.session_state.last_scan_time = None
+    
+    # Manual refresh controls at the top
+    col_refresh1, col_refresh2 = st.columns([1, 3])
+    
+    with col_refresh1:
+        if st.button("🚀 Scan All Markets", type="primary", help="Run a full scan using the Master Analyzer"):
+            st.session_state.swing_data = None # Clear previous results
+            st.session_state.last_scan_time = datetime.now()
+            
+            progress_bar = st.progress(0, text="Initializing scan...")
+            
+            def progress_callback(message, progress):
+                progress_bar.progress(progress, text=message)
+
+            try:
+                # Use the master analyzer directly
+                results = dashboard.analyzer.get_daily_swing_signals(progress_callback)
+                st.session_state.swing_data = results
+                progress_bar.progress(1.0, text="Scan complete!")
+                time.sleep(1) # Keep message on screen
+                progress_bar.empty()
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Scan failed: {e}")
+                progress_bar.empty()
+
+    with col_refresh2:
+        if st.session_state.last_scan_time:
+            st.info(f"Last scan: {st.session_state.last_scan_time.strftime('%Y-%m-%d %H:%M:%S')}")
+
+    # Display results
+    if st.session_state.swing_data:
+        results = st.session_state.swing_data
+        
+        st.subheader("Scan Summary")
+        summary_cols = st.columns(3)
+        summary_cols[0].metric("Total Stocks Scanned", results['total_stocks_scanned'])
+        summary_cols[1].metric("Total Scan Duration", f"{results['scan_duration']:.1f}s")
+        
+        for market_key, market_data in results['markets'].items():
+            if selected_market != "All Markets" and market_data['name'] != selected_market:
+                continue
+
+            st.markdown(f"### {market_data['name']} Top 5 Results")
+            
+            if not market_data['top_5']:
+                st.warning(f"No stocks found for {market_data['name']}.")
+                continue
+
+            df = pd.DataFrame(market_data['top_5'])
+            
+            # Format for display
+            df_display = pd.DataFrame()
+            df_display['Symbol'] = df['symbol']
+            df_display['Price'] = df['current_price'].map('{:,.2f}'.format)
+            df_display['Score'] = df['swing_score']
+            df_display['Recommendation'] = df['recommendation']
+            df_display['Risk'] = df['risk_level']
+            df_display['Confidence'] = df['confidence']
+            
+            st.dataframe(df_display.style.apply(style_rows, axis=1), use_container_width=True)
+
+            # Detailed view for each of the top 5
+            for index, row in df.iterrows():
+                with st.expander(f"🔍 Detailed Analysis for {row['symbol']}"):
+                    display_detailed_analysis(row)
+    else:
+        st.info("Click 'Scan All Markets' to get the latest swing trading signals.")
+
+def display_detailed_analysis(stock_data):
+    """Displays a detailed breakdown of a stock's analysis."""
+    cols = st.columns([2, 3])
+    
+    with cols[0]:
+        st.metric("Swing Score", f"{stock_data['swing_score']}/100")
+        st.metric("Recommendation", stock_data['recommendation'])
+        st.metric("Risk Level", stock_data['risk_level'])
+        st.metric("Confidence", stock_data['confidence'])
+
+    with cols[1]:
+        st.markdown("**Technical Analysis**")
+        tech = stock_data['technical_indicators']
+        st.text(f"RSI: {tech['rsi']['value']:.1f} ({tech['rsi']['status']})")
+        st.text(f"MACD: {tech['macd']['status']}")
+        st.text(f"Trend Strength (ADX): {tech['adx']['trend_strength']}")
+        st.text(f"Volume (OBV): {tech['volume_analysis']['obv_trend']}")
+        
+        st.markdown("**Risk Management**")
+        risk = stock_data['risk_management']
+        st.text(f"Stop Loss: {risk['stop_loss']:.2f}")
+        st.text(f"Target 1: {risk['target_1']:.2f}")
+        st.text(f"Risk/Reward: {risk['risk_reward_ratio']}")
+
+def style_rows(row):
+    """Style dataframe rows based on recommendation"""
+    if 'BUY' in row['Recommendation']:
+        return ['background-color: #2E7D32'] * len(row) # Dark Green
+    elif 'SELL' in row['Recommendation']:
+        return ['background-color: #C62828'] * len(row) # Dark Red
+    elif 'HOLD' in row['Recommendation']:
+        return ['background-color: #FF8F00'] * len(row) # Amber
+    else: # AVOID
+        return ['background-color: #455A64'] * len(row) # Blue Grey
+
+def main():
+    dashboard = TradingDashboard()
+    
+    # Sidebar
+    st.sidebar.title("🎯 Trading Controls")
+    
+    # Show logout option in sidebar
+    show_logout_option()
+    
+    # Mobile view toggle
+    show_mobile_toggle()
+    
+    # Market selection
+    selected_market = st.sidebar.selectbox(
+        "Select Market",
+        ["All Markets", "🇺🇸 USA", "🇮🇳 India", "🇲🇾 Malaysia"]
+    )
+    
+    # Refresh button
+    if st.sidebar.button("🔄 Refresh Data", type="primary"):
+        st.cache_data.clear()
+        # Force reload portfolio from disk
+        dashboard.portfolio = PaperTradingPortfolio(initial_capital=TRADING_CONFIG['initial_capital'])
+        st.success("✅ Data refreshed!")
+        st.rerun()
+    
+    # Portfolio actions
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 📊 Portfolio Actions")
+    
+    if st.sidebar.button("📈 Update Positions"):
+        dashboard.portfolio.update_positions()
+        # Reload portfolio from disk to ensure fresh data
+        dashboard.portfolio = PaperTradingPortfolio(initial_capital=TRADING_CONFIG['initial_capital'])
+        st.sidebar.success("Positions updated!")
+    
+    # Main content
+    st.title("📈 Swing Trading Dashboard")
+    st.markdown("*Real-time signals, portfolio tracking, and performance analytics*")
+    
+    # Main tabs
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "🎯 Live Signals", 
+        "💼 Portfolio", 
+        "📊 Analytics",
+        "🏆 Performance",
+        "📜 Trade History",
+        "⚙️ Settings"
+    ])
+    
+    with tab1:
+        show_live_signals(dashboard, selected_market)
+    
+    with tab2:
+        show_portfolio(dashboard)
+    
+    with tab3:
+        show_performance(dashboard)
+    
+    with tab4:
+        show_charts(dashboard)
+    
+    with tab5:
+        show_trade_history(dashboard)
+    
+    with tab6:
+        show_portfolio_settings(dashboard)
+
+@st.cache_data(ttl=300)  # Cache for 5 minutes
+def get_market_signals(market_filter):
+    """Get signals for selected market"""
+    dashboard = TradingDashboard()
+    
+    if market_filter == "All Markets":
+        markets = get_comprehensive_market_watchlists()
+    elif market_filter == "🇺🇸 USA":
+        watchlists = get_comprehensive_market_watchlists()
+        markets = {"usa": watchlists["usa"]}
+    elif market_filter == "🇮🇳 India":
+        watchlists = get_comprehensive_market_watchlists()
+        markets = {"india": watchlists["india"]}
+    elif market_filter == "🇲🇾 Malaysia":
+        watchlists = get_comprehensive_market_watchlists()
+        markets = {"malaysia": watchlists["malaysia"]}
+
+    all_signals = []
+    processed_symbols = set()  # Track processed symbols to avoid duplicates
+    
+    for market_name, symbols in markets.items():
+        for symbol in symbols[:8]:  # Limit to 8 stocks per market for performance
+            if symbol in processed_symbols:
+                continue
+            processed_symbols.add(symbol)
+            
+            analysis = dashboard.get_stock_analysis(symbol)
+            if analysis:
+                signals = analysis['signals']
+                latest = analysis['latest']
+                
+                # Determine currency and price display
+                if symbol.endswith('.NS') or symbol.endswith('.BO'):
+                    currency = 'INR'
+                    # yfinance already provides Indian stocks in INR
+                    price_display = f"₹{latest['Close']:,.2f}"
+                    raw_price = latest['Close']
+                elif symbol.endswith('.KL'):
+                    currency = 'MYR'
+                    # yfinance already provides Malaysian stocks in MYR
+                    price_display = f"RM{latest['Close']:,.2f}"
+                    raw_price = latest['Close']
+                else:
+                    currency = 'USD'
+                    price_display = f"${latest['Close']:,.2f}"
+                    raw_price = latest['Close']
+                
+                all_signals.append({
+                    'Symbol': symbol,
+                    'Market': market_name.title(),
+                    'Price': price_display,
+                    'Price_Raw': raw_price,
+                    'Currency': currency,
+                    'Signal': signals['recommendation'],
+                    'Confidence': f"{signals['confidence']}%",
+                    'RSI': f"{signals['rsi']:.1f}",
+                    'Trend': '📈' if signals['sma_bullish'] else '📉',
+                    'MACD': '🟢' if signals['macd_bullish'] else '🔴',
+                    'BB_Position': signals['bb_position'],
+                    'confidence_num': signals['confidence']
+                })
+    
+    return all_signals
+
+def show_live_signals(dashboard, selected_market):
+    """Display enhanced swing trading signals with portfolio analysis"""
+    st.header("🎯 Daily Swing Trading Signals")
+    
+    # Initialize session state for swing data if not exists
+    if 'swing_data' not in st.session_state:
+        st.session_state.swing_data = None
+        st.session_state.last_scan_time = None
+    
+    # Manual refresh controls at the top
+    col_refresh1, col_refresh2 = st.columns([1, 3])
+    
+    with col_refresh1:
+        if st.button("🚀 Scan All Markets", type="primary", help="Run a full scan using the Master Analyzer"):
+            st.session_state.swing_data = None # Clear previous results
+            st.session_state.last_scan_time = datetime.now()
+            
+            progress_bar = st.progress(0, text="Initializing scan...")
+            
+            def progress_callback(message, progress):
+                progress_bar.progress(progress, text=message)
+
+            try:
+                # Use the master analyzer directly
+                results = dashboard.analyzer.get_daily_swing_signals(progress_callback)
+                st.session_state.swing_data = results
+                progress_bar.progress(1.0, text="Scan complete!")
+                time.sleep(1) # Keep message on screen
+                progress_bar.empty()
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Scan failed: {e}")
+                progress_bar.empty()
+
+    with col_refresh2:
+        if st.session_state.last_scan_time:
+            st.info(f"Last scan: {st.session_state.last_scan_time.strftime('%Y-%m-%d %H:%M:%S')}")
+
+    # Display results
+    if st.session_state.swing_data:
+        results = st.session_state.swing_data
+        
+        st.subheader("Scan Summary")
+        summary_cols = st.columns(3)
+        summary_cols[0].metric("Total Stocks Scanned", results['total_stocks_scanned'])
+        summary_cols[1].metric("Total Scan Duration", f"{results['scan_duration']:.1f}s")
+        
+        for market_key, market_data in results['markets'].items():
+            if selected_market != "All Markets" and market_data['name'] != selected_market:
+                continue
+
+            st.markdown(f"### {market_data['name']} Top 5 Results")
+            
+            if not market_data['top_5']:
+                st.warning(f"No stocks found for {market_data['name']}.")
+                continue
+
+            df = pd.DataFrame(market_data['top_5'])
+            
+            # Format for display
+            df_display = pd.DataFrame()
+            df_display['Symbol'] = df['symbol']
+            df_display['Price'] = df['current_price'].map('{:,.2f}'.format)
+            df_display['Score'] = df['swing_score']
+            df_display['Recommendation'] = df['recommendation']
+            df_display['Risk'] = df['risk_level']
+            df_display['Confidence'] = df['confidence']
+            
+            st.dataframe(df_display.style.apply(style_rows, axis=1), use_container_width=True)
+
+            # Detailed view for each of the top 5
+            for index, row in df.iterrows():
+                with st.expander(f"🔍 Detailed Analysis for {row['symbol']}"):
+                    display_detailed_analysis(row)
+    else:
+        st.info("Click 'Scan All Markets' to get the latest swing trading signals.")
+
+def display_detailed_analysis(stock_data):
+    """Displays a detailed breakdown of a stock's analysis."""
+    cols = st.columns([2, 3])
+    
+    with cols[0]:
+        st.metric("Swing Score", f"{stock_data['swing_score']}/100")
+        st.metric("Recommendation", stock_data['recommendation'])
+        st.metric("Risk Level", stock_data['risk_level'])
+        st.metric("Confidence", stock_data['confidence'])
+
+    with cols[1]:
+        st.markdown("**Technical Analysis**")
+        tech = stock_data['technical_indicators']
+        st.text(f"RSI: {tech['rsi']['value']:.1f} ({tech['rsi']['status']})")
+        st.text(f"MACD: {tech['macd']['status']}")
+        st.text(f"Trend Strength (ADX): {tech['adx']['trend_strength']}")
+        st.text(f"Volume (OBV): {tech['volume_analysis']['obv_trend']}")
+        
+        st.markdown("**Risk Management**")
+        risk = stock_data['risk_management']
+        st.text(f"Stop Loss: {risk['stop_loss']:.2f}")
+        st.text(f"Target 1: {risk['target_1']:.2f}")
+        st.text(f"Risk/Reward: {risk['risk_reward_ratio']}")
+
+def style_rows(row):
+    """Style dataframe rows based on recommendation"""
+    if 'BUY' in row['Recommendation']:
+        return ['background-color: #2E7D32'] * len(row) # Dark Green
+    elif 'SELL' in row['Recommendation']:
+        return ['background-color: #C62828'] * len(row) # Dark Red
+    elif 'HOLD' in row['Recommendation']:
+        return ['background-color: #FF8F00'] * len(row) # Amber
+    else: # AVOID
+        return ['background-color: #455A64'] * len(row) # Blue Grey
+
+def main():
+    dashboard = TradingDashboard()
+    
+    # Sidebar
+    st.sidebar.title("🎯 Trading Controls")
+    
+    # Show logout option in sidebar
+    show_logout_option()
+    
+    # Mobile view toggle
+    show_mobile_toggle()
+    
+    # Market selection
+    selected_market = st.sidebar.selectbox(
+        "Select Market",
+        ["All Markets", "🇺🇸 USA", "🇮🇳 India", "🇲🇾 Malaysia"]
+    )
+    
+    # Refresh button
+    if st.sidebar.button("🔄 Refresh Data", type="primary"):
+        st.cache_data.clear()
+        # Force reload portfolio from disk
+        dashboard.portfolio = PaperTradingPortfolio(initial_capital=TRADING_CONFIG['initial_capital'])
+        st.success("✅ Data refreshed!")
+        st.rerun()
+    
+    # Portfolio actions
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 📊 Portfolio Actions")
+    
+    if st.sidebar.button("📈 Update Positions"):
+        dashboard.portfolio.update_positions()
+        # Reload portfolio from disk to ensure fresh data
+        dashboard.portfolio = PaperTradingPortfolio(initial_capital=TRADING_CONFIG['initial_capital'])
+        st.sidebar.success("Positions updated!")
+    
+    # Main content
+    st.title("📈 Swing Trading Dashboard")
+    st.markdown("*Real-time signals, portfolio tracking, and performance analytics*")
+    
+    # Main tabs
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "🎯 Live Signals", 
+        "💼 Portfolio", 
+        "📊 Analytics",
+        "🏆 Performance",
+        "📜 Trade History",
+        "⚙️ Settings"
+    ])
+    
+    with tab1:
+        show_live_signals(dashboard, selected_market)
+    
+    with tab2:
+        show_portfolio(dashboard)
+    
+    with tab3:
+        show_performance(dashboard)
+    
+    with tab4:
+        show_charts(dashboard)
+    
+    with tab5:
+        show_trade_history(dashboard)
+    
+    with tab6:
+        show_portfolio_settings(dashboard)
+
+@st.cache_data(ttl=300)  # Cache for 5 minutes
+def get_market_signals(market_filter):
+    """Get signals for selected market"""
+    dashboard = TradingDashboard()
+    
+    if market_filter == "All Markets":
+        markets = get_comprehensive_market_watchlists()
+    elif market_filter == "🇺🇸 USA":
+        watchlists = get_comprehensive_market_watchlists()
+        markets = {"usa": watchlists["usa"]}
+    elif market_filter == "🇮🇳 India":
+        watchlists = get_comprehensive_market_watchlists()
+        markets = {"india": watchlists["india"]}
+    elif market_filter == "🇲🇾 Malaysia":
+        watchlists = get_comprehensive_market_watchlists()
+        markets = {"malaysia": watchlists["malaysia"]}
+
+    all_signals = []
+    processed_symbols = set()  # Track processed symbols to avoid duplicates
+    
+    for market_name, symbols in markets.items():
+        for symbol in symbols[:8]:  # Limit to 8 stocks per market for performance
+            if symbol in processed_symbols:
+                continue
+            processed_symbols.add(symbol)
+            
+            analysis = dashboard.get_stock_analysis(symbol)
+            if analysis:
+                signals = analysis['signals']
+                latest = analysis['latest']
+                
+                # Determine currency and price display
+                if symbol.endswith('.NS') or symbol.endswith('.BO'):
+                    currency = 'INR'
+                    # yfinance already provides Indian stocks in INR
+                    price_display = f"₹{latest['Close']:,.2f}"
+                    raw_price = latest['Close']
+                elif symbol.endswith('.KL'):
+                    currency = 'MYR'
+                    # yfinance already provides Malaysian stocks in MYR
+                    price_display = f"RM{latest['Close']:,.2f}"
+                    raw_price = latest['Close']
+                else:
+                    currency = 'USD'
+                    price_display = f"${latest['Close']:,.2f}"
+                    raw_price = latest['Close']
+                
+                all_signals.append({
+                    'Symbol': symbol,
+                    'Market': market_name.title(),
+                    'Price': price_display,
+                    'Price_Raw': raw_price,
+                    'Currency': currency,
+                    'Signal': signals['recommendation'],
+                    'Confidence': f"{signals['confidence']}%",
+                    'RSI': f"{signals['rsi']:.1f}",
+                    'Trend': '📈' if signals['sma_bullish'] else '📉',
+                    'MACD': '🟢' if signals['macd_bullish'] else '🔴',
+                    'BB_Position': signals['bb_position'],
+                    'confidence_num': signals['confidence']
+                })
+    
+    return all_signals
+
+def show_live_signals(dashboard, selected_market):
+    """Display enhanced swing trading signals with portfolio analysis"""
+    st.header("🎯 Daily Swing Trading Signals")
+    
+    # Initialize session state for swing data if not exists
+    if 'swing_data' not in st.session_state:
+        st.session_state.swing_data = None
+        st.session_state.last_scan_time = None
+    
+    # Manual refresh controls at the top
+    col_refresh1, col_refresh2 = st.columns([1, 3])
+    
+    with col_refresh1:
+        if st.button("🚀 Scan All Markets", type="primary", help="Run a full scan using the Master Analyzer"):
+            st.session_state.swing_data = None # Clear previous results
+            st.session_state.last_scan_time = datetime.now()
+            
+            progress_bar = st.progress(0, text="Initializing scan...")
+            
+            def progress_callback(message, progress):
+                progress_bar.progress(progress, text=message)
+
+            try:
+                # Use the master analyzer directly
+                results = dashboard.analyzer.get_daily_swing_signals(progress_callback)
+                st.session_state.swing_data = results
+                progress_bar.progress(1.0, text="Scan complete!")
+                time.sleep(1) # Keep message on screen
+                progress_bar.empty()
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Scan failed: {e}")
+                progress_bar.empty()
+
+    with col_refresh2:
+        if st.session_state.last_scan_time:
+            st.info(f"Last scan: {st.session_state.last_scan_time.strftime('%Y-%m-%d %H:%M:%S')}")
+
+    # Display results
+    if st.session_state.swing_data:
+        results = st.session_state.swing_data
+        
+        st.subheader("Scan Summary")
+        summary_cols = st.columns(3)
+        summary_cols[0].metric("Total Stocks Scanned", results['total_stocks_scanned'])
+        summary_cols[1].metric("Total Scan Duration", f"{results['scan_duration']:.1f}s")
+        
+        for market_key, market_data in results['markets'].items():
+            if selected_market != "All Markets" and market_data['name'] != selected_market:
+                continue
+
+            st.markdown(f"### {market_data['name']} Top 5 Results")
+            
+            if not market_data['top_5']:
+                st.warning(f"No stocks found for {market_data['name']}.")
+                continue
+
+            df = pd.DataFrame(market_data['top_5'])
+            
+            # Format for display
+            df_display = pd.DataFrame()
+            df_display['Symbol'] = df['symbol']
+            df_display['Price'] = df['current_price'].map('{:,.2f}'.format)
+            df_display['Score'] = df['swing_score']
+            df_display['Recommendation'] = df['recommendation']
+            df_display['Risk'] = df['risk_level']
+            df_display['Confidence'] = df['confidence']
+            
+            st.dataframe(df_display.style.apply(style_rows, axis=1), use_container_width=True)
+
+            # Detailed view for each of the top 5
+            for index, row in df.iterrows():
+                with st.expander(f"🔍 Detailed Analysis for {row['symbol']}"):
+                    display_detailed_analysis(row)
+    else:
+        st.info("Click 'Scan All Markets' to get the latest swing trading signals.")
+
+def display_detailed_analysis(stock_data):
+    """Displays a detailed breakdown of a stock's analysis."""
+    cols = st.columns([2, 3])
+    
+    with cols[0]:
+        st.metric("Swing Score", f"{stock_data['swing_score']}/100")
+        st.metric("Recommendation", stock_data['recommendation'])
+        st.metric("Risk Level", stock_data['risk_level'])
+        st.metric("Confidence", stock_data['confidence'])
+
+    with cols[1]:
+        st.markdown("**Technical Analysis**")
+        tech = stock_data['technical_indicators']
+        st.text(f"RSI: {tech['rsi']['value']:.1f} ({tech['rsi']['status']})")
+        st.text(f"MACD: {tech['macd']['status']}")
+        st.text(f"Trend Strength (ADX): {tech['adx']['trend_strength']}")
+        st.text(f"Volume (OBV): {tech['volume_analysis']['obv_trend']}")
+        
+        st.markdown("**Risk Management**")
+        risk = stock_data['risk_management']
+        st.text(f"Stop Loss: {risk['stop_loss']:.2f}")
+        st.text(f"Target 1: {risk['target_1']:.2f}")
+        st.text(f"Risk/Reward: {risk['risk_reward_ratio']}")
+
+def style_rows(row):
+    """Style dataframe rows based on recommendation"""
+    if 'BUY' in row['Recommendation']:
+        return ['background-color: #2E7D32'] * len(row) # Dark Green
+    elif 'SELL' in row['Recommendation']:
+        return ['background-color: #C62828'] * len(row) # Dark Red
+    elif 'HOLD'
     # Quick actions at the top - Responsive
     if is_mobile():
         # Stack actions vertically on mobile
