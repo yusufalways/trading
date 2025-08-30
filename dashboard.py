@@ -33,6 +33,15 @@ from tools.portfolio_manager import PaperTradingPortfolio
 from tools.technical_analysis import TechnicalAnalyzer
 from tools.enhanced_signals import get_daily_swing_signals, get_market_watchlists
 
+# Import advanced analysis modules
+try:
+    from tools.advanced_technical_analysis import AdvancedTechnicalAnalysis
+    from tools.market_context_analyzer import MarketContextAnalyzer, EnhancedEntryChecklist
+    ADVANCED_ANALYSIS_AVAILABLE = True
+except ImportError as e:
+    print(f"Advanced analysis modules not available: {e}")
+    ADVANCED_ANALYSIS_AVAILABLE = False
+
 # Helper functions for responsive design
 def is_mobile():
     """Detect if user is on mobile device"""
@@ -1447,6 +1456,187 @@ def show_live_signals(dashboard, selected_market):
                     st.markdown(f"• 🔴 {warning}")
             else:
                 st.markdown("• ✅ No major risk flags identified")
+            
+            # Advanced Analysis Integration (if available)
+            if ADVANCED_ANALYSIS_AVAILABLE:
+                with st.expander("🔬 **Advanced Technical Analysis**", expanded=False):
+                    try:
+                        # Initialize advanced analysis
+                        advanced_analyzer = AdvancedTechnicalAnalysis(symbol)
+                        market_analyzer = MarketContextAnalyzer()
+                        entry_checker = EnhancedEntryChecklist()
+                        
+                        st.markdown("**🔄 Performing Comprehensive Analysis...**")
+                        
+                        # Comprehensive technical analysis
+                        advanced_analysis = advanced_analyzer.comprehensive_entry_analysis(entry_price)
+                        
+                        # Market context analysis
+                        market_context = market_analyzer.comprehensive_market_analysis(symbol)
+                        
+                        # Entry validation
+                        entry_validation = entry_checker.validate_entry_setup(
+                            advanced_analysis, market_context, entry_price, stop_loss, target_price
+                        )
+                        
+                        # Display results in tabs
+                        tab1, tab2, tab3, tab4 = st.tabs(["📊 Setup Quality", "🌍 Market Context", "💎 Volume Profile", "✅ Entry Validation"])
+                        
+                        with tab1:
+                            st.markdown("### Setup Quality Analysis")
+                            score = advanced_analysis.get('setup_quality_score', 0)
+                            recommendation = advanced_analysis.get('entry_recommendation', {})
+                            
+                            # Setup quality meter
+                            score_color = "🟢" if score >= 70 else "🟡" if score >= 50 else "🔴"
+                            st.markdown(f"**Setup Quality Score:** {score_color} {score}/100")
+                            
+                            action = recommendation.get('action', 'WAIT')
+                            confidence = recommendation.get('confidence', 'Medium')
+                            st.markdown(f"**Recommendation:** {action} (Confidence: {confidence})")
+                            
+                            # Timeframe confluence
+                            confluence = advanced_analysis.get('timeframe_confluence', {})
+                            alignment = confluence.get('alignment', 'Unknown')
+                            confluence_score = confluence.get('confluence_score', 0)
+                            st.markdown(f"**Multi-Timeframe Alignment:** {alignment} ({confluence_score:.0f}%)")
+                            
+                            # Pattern analysis
+                            patterns = advanced_analysis.get('pattern_analysis', {})
+                            if patterns.get('double_bottom', False):
+                                st.success("✅ Double Bottom Pattern Detected")
+                            else:
+                                st.info("ℹ️ No major patterns identified")
+                        
+                        with tab2:
+                            st.markdown("### Market Context & Sentiment")
+                            
+                            # Overall market sentiment
+                            sentiment = market_context.get('overall_market_sentiment', 'Unknown')
+                            sentiment_color = "🟢" if 'Bullish' in sentiment else "🔴" if 'Bearish' in sentiment else "🟡"
+                            st.markdown(f"**Market Sentiment:** {sentiment_color} {sentiment}")
+                            
+                            # Sector performance
+                            sector_analysis = market_context.get('sector_analysis', {})
+                            rotation = sector_analysis.get('market_rotation_analysis', 'Unknown')
+                            st.markdown(f"**Market Rotation:** {rotation}")
+                            
+                            # VIX sentiment
+                            vix_data = market_context.get('market_internals', {}).get('vix_sentiment', {})
+                            vix_sentiment = vix_data.get('sentiment', 'Unknown')
+                            vix_level = vix_data.get('vix_value', 0)
+                            st.markdown(f"**VIX Sentiment:** {vix_sentiment} ({vix_level:.1f})")
+                            
+                            # Top performing sectors
+                            top_sectors = sector_analysis.get('top_sectors', [])
+                            if top_sectors:
+                                st.markdown("**Top Performing Sectors:**")
+                                for sector, data in top_sectors[:3]:
+                                    performance = data.get('performance', 0)
+                                    st.markdown(f"• {sector}: {performance:+.1f}%")
+                        
+                        with tab3:
+                            st.markdown("### Volume Profile Analysis")
+                            
+                            volume_analysis = advanced_analysis.get('volume_analysis', {})
+                            
+                            # Volume trend
+                            volume_trend = volume_analysis.get('volume_trend', 'Unknown')
+                            volume_ratio = volume_analysis.get('volume_ratio', 1)
+                            volume_color = "🟢" if 'Above' in volume_trend else "🟡"
+                            st.markdown(f"**Volume Trend:** {volume_color} {volume_trend} ({volume_ratio:.1f}x avg)")
+                            
+                            # Point of Control
+                            poc_price = volume_analysis.get('poc_price', 0)
+                            if poc_price > 0:
+                                poc_distance = ((price - poc_price) / price) * 100
+                                st.markdown(f"**Point of Control:** {currency_symbol}{poc_price:.2f} ({poc_distance:+.1f}%)")
+                            
+                            # Accumulation/Distribution
+                            ad_line = volume_analysis.get('accumulation_distribution', 0)
+                            ad_trend = "Accumulation" if ad_line > 0 else "Distribution" if ad_line < 0 else "Neutral"
+                            st.markdown(f"**A/D Line:** {ad_trend}")
+                        
+                        with tab4:
+                            st.markdown("### Entry Validation Checklist")
+                            
+                            # Overall validation score
+                            total_score = entry_validation.get('total_score', 0)
+                            final_recommendation = entry_validation.get('recommendation', {})
+                            
+                            score_color = "🟢" if total_score >= 70 else "🟡" if total_score >= 50 else "🔴"
+                            st.markdown(f"**Validation Score:** {score_color} {total_score}/100")
+                            
+                            action = final_recommendation.get('action', 'WAIT')
+                            confidence = final_recommendation.get('confidence', 'Medium')
+                            position_size = final_recommendation.get('position_size', 'No position')
+                            rationale = final_recommendation.get('rationale', 'No rationale provided')
+                            
+                            st.markdown(f"**Final Recommendation:** {action}")
+                            st.markdown(f"**Confidence Level:** {confidence}")
+                            st.markdown(f"**Position Size:** {position_size}")
+                            st.markdown(f"**Rationale:** {rationale}")
+                            
+                            # Validation breakdown
+                            validation_results = entry_validation.get('validation_results', {})
+                            strong_points = validation_results.get('strong_points', [])
+                            weak_points = validation_results.get('weak_points', [])
+                            
+                            if strong_points:
+                                st.markdown("**✅ Strengths:**")
+                                for point in strong_points:
+                                    st.markdown(f"• {point}")
+                            
+                            if weak_points:
+                                st.markdown("**⚠️ Weaknesses:**")
+                                for point in weak_points:
+                                    st.markdown(f"• {point}")
+                            
+                            # Risk assessment
+                            risks = validation_results.get('risk_assessment', [])
+                            if risks:
+                                st.markdown("**🔴 Risk Factors:**")
+                                for risk in risks:
+                                    st.markdown(f"• {risk}")
+                            
+                            # Enhanced risk management
+                            risk_mgmt = advanced_analysis.get('risk_management', {})
+                            if risk_mgmt:
+                                st.markdown("**🛡️ Enhanced Risk Management:**")
+                                atr_stop = risk_mgmt.get('atr_stop_loss', 0)
+                                if atr_stop > 0:
+                                    st.markdown(f"• ATR-based stop: {currency_symbol}{atr_stop:.2f}")
+                                
+                                dynamic_targets = risk_mgmt.get('dynamic_targets', {})
+                                target_1 = dynamic_targets.get('target_1', 0)
+                                target_2 = dynamic_targets.get('target_2', 0)
+                                if target_1 > 0:
+                                    st.markdown(f"• Dynamic Target 1: {currency_symbol}{target_1:.2f}")
+                                if target_2 > 0:
+                                    st.markdown(f"• Dynamic Target 2: {currency_symbol}{target_2:.2f}")
+                                
+                                rr_ratios = risk_mgmt.get('risk_reward_ratios', {})
+                                target_1_rr = rr_ratios.get('target_1_rr', 0)
+                                target_2_rr = rr_ratios.get('target_2_rr', 0)
+                                if target_1_rr > 0:
+                                    st.markdown(f"• Target 1 R/R: {target_1_rr:.1f}:1")
+                                if target_2_rr > 0:
+                                    st.markdown(f"• Target 2 R/R: {target_2_rr:.1f}:1")
+                        
+                        # Overall recommendation summary
+                        st.markdown("---")
+                        if total_score >= 70:
+                            st.success(f"🎯 **ENHANCED ANALYSIS CONFIRMS:** This is a high-quality setup with {total_score}/100 score")
+                        elif total_score >= 50:
+                            st.warning(f"⚠️ **MIXED SIGNALS:** Setup shows {total_score}/100 score - consider smaller position")
+                        else:
+                            st.error(f"🚫 **POOR SETUP QUALITY:** Score {total_score}/100 - wait for better opportunity")
+                        
+                    except Exception as e:
+                        st.error(f"❌ Advanced analysis unavailable: {str(e)}")
+                        st.info("💡 Install required packages (talib, etc.) for advanced features")
+            else:
+                st.info("💡 **Advanced Analysis:** Install TA-Lib and other dependencies for enhanced technical analysis")
                 
                 # Trading plan summary
                 st.markdown("---")
