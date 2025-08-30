@@ -976,32 +976,92 @@ def show_live_signals(dashboard, selected_market):
                 else:
                     currency_symbol = "$"
                 
-                # Main metrics row
-                metric_col1, metric_col2, metric_col3, metric_col4, metric_col5 = st.columns(5)
-                
-                with metric_col1:
-                    score_color = "🟢" if score >= 80 else "🟡" if score >= 60 else "🔴"
-                    st.metric("Swing Score", f"{score_color} {score}/100")
-                
-                with metric_col2:
-                    st.metric("Current Price", f"{currency_symbol}{price:.2f}")
-                
-                with metric_col3:
-                    st.metric("Market", market_name)
-                
-                with metric_col4:
-                    signal_color = "🟢" if recommendation == "STRONG BUY" else "🟡"
-                    st.metric("Signal", f"{signal_color} {recommendation}")
-                
-                with metric_col5:
+                # Main metrics row - Mobile Responsive
+                if is_mobile():
+                    # Mobile: Stack metrics in 2x2 + 1 layout
+                    metric_row1_col1, metric_row1_col2 = st.columns(2)
+                    with metric_row1_col1:
+                        score_color = "🟢" if score >= 80 else "🟡" if score >= 60 else "🔴"
+                        st.metric("Swing Score", f"{score_color} {score}/100")
+                    with metric_row1_col2:
+                        st.metric("Current Price", f"{currency_symbol}{price:.2f}")
+                    
+                    metric_row2_col1, metric_row2_col2 = st.columns(2)
+                    with metric_row2_col1:
+                        st.metric("Market", market_name)
+                    with metric_row2_col2:
+                        signal_color = "🟢" if recommendation == "STRONG BUY" else "🟡"
+                        st.metric("Signal", f"{signal_color} {recommendation}")
+                    
+                    # Setup type in its own row
                     st.metric("Setup Type", entry_type)
+                else:
+                    # Desktop: 5-column layout
+                    metric_col1, metric_col2, metric_col3, metric_col4, metric_col5 = st.columns(5)
+                    
+                    with metric_col1:
+                        score_color = "🟢" if score >= 80 else "🟡" if score >= 60 else "🔴"
+                        st.metric("Swing Score", f"{score_color} {score}/100")
+                    
+                    with metric_col2:
+                        st.metric("Current Price", f"{currency_symbol}{price:.2f}")
+                    
+                    with metric_col3:
+                        st.metric("Market", market_name)
+                    
+                    with metric_col4:
+                        signal_color = "🟢" if recommendation == "STRONG BUY" else "🟡"
+                        st.metric("Signal", f"{signal_color} {recommendation}")
+                    
+                    with metric_col5:
+                        st.metric("Setup Type", entry_type)
                 
-                # Three-column layout for detailed analysis
-                analysis_col1, analysis_col2, analysis_col3 = st.columns([1, 1, 1])
-                
-                # Column 1: Support & Resistance Analysis
-                with analysis_col1:
-                    st.markdown("### 🎯 **Support & Resistance Levels**")
+                # Detailed analysis sections - Mobile Responsive
+                if is_mobile():
+                    # Mobile: Use expandable sections for better organization
+                    with st.container():
+                        # Support & Resistance Analysis
+                        with st.expander("🎯 Support & Resistance Levels", expanded=True):
+                            # Get detailed levels from the analysis
+                            support_levels = selected_stock.get('support_levels', [price * 0.95, price * 0.90])
+                            resistance_levels = selected_stock.get('resistance_levels', [price * 1.05, price * 1.10])
+                            
+                            # Current position relative to levels
+                            nearest_support = max([level for level in support_levels if level <= price], default=price * 0.95)
+                            nearest_resistance = min([level for level in resistance_levels if level >= price], default=price * 1.05)
+                            
+                            support_distance = ((price - nearest_support) / price) * 100
+                            resistance_distance = ((nearest_resistance - price) / price) * 100
+                            
+                            # Support levels
+                            st.markdown("**🟢 Support Levels:**")
+                            for i, level in enumerate(sorted(support_levels, reverse=True)[:3]):
+                                distance = ((price - level) / price) * 100
+                                strength = "Strong" if i == 0 else "Medium" if i == 1 else "Weak"
+                                st.write(f"• **{strength}**: {currency_symbol}{level:.2f} ({distance:+.1f}%)")
+                            
+                            # Resistance levels  
+                            st.markdown("**🔴 Resistance Levels:**")
+                            for i, level in enumerate(sorted(resistance_levels)[:3]):
+                                distance = ((level - price) / price) * 100
+                                strength = "Strong" if i == 0 else "Medium" if i == 1 else "Weak"
+                                st.write(f"• **{strength}**: {currency_symbol}{level:.2f} (+{distance:.1f}%)")
+                            
+                            # Position analysis
+                            st.markdown("**📍 Current Position:**")
+                            if support_distance <= 3:
+                                st.success(f"✅ Near Support ({support_distance:.1f}% above)")
+                            elif resistance_distance <= 3:
+                                st.warning(f"⚠️ Near Resistance ({resistance_distance:.1f}% below)")
+                            else:
+                                st.info("🎯 In middle range - good for swing entry")
+                else:
+                    # Desktop: Three-column layout for detailed analysis
+                    analysis_col1, analysis_col2, analysis_col3 = st.columns([1, 1, 1])
+                    
+                    # Column 1: Support & Resistance Analysis
+                    with analysis_col1:
+                        st.markdown("### 🎯 **Support & Resistance Levels**")
                     
                     # Get detailed levels from the analysis
                     support_levels = selected_stock.get('support_levels', [price * 0.95, price * 0.90])
