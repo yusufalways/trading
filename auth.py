@@ -81,95 +81,86 @@ class SimpleAuth:
             return None
     
     def set_remember_me(self, email):
-        """Set remember me using session state with persistence"""
+        """Set remember me using file-based persistence"""
         token = self.create_session_token(email)
-        # Store in session state for persistence
+        
+        # Store in session state
         st.session_state.remember_token = token
         st.session_state.remember_email = email
         st.session_state.remember_me_active = True
         
-        # Also use JavaScript to store in localStorage as backup
-        st.markdown(f"""
-        <script>
-        localStorage.setItem('trading_auth_token', '{token}');
-        localStorage.setItem('trading_auth_email', '{email}');
-        localStorage.setItem('trading_remember_me', 'true');
-        </script>
-        """, unsafe_allow_html=True)
+        # Also store in a local file for persistence across sessions
+        remember_file = "data/remember_me.json"
+        os.makedirs(os.path.dirname(remember_file), exist_ok=True)
+        
+        remember_data = {
+            "token": token,
+            "email": email,
+            "created": datetime.now().isoformat()
+        }
+        
+        try:
+            with open(remember_file, 'w') as f:
+                json.dump(remember_data, f)
+        except Exception as e:
+            st.error(f"Could not save remember me data: {e}")
+        
         return token
     
     def check_remember_me(self):
-        """Check for remember me token on page load"""
-        # First check session state
+        """Check for remember me token from file"""
+        remember_file = "data/remember_me.json"
+        
+        # First check session state (for current session)
         if st.session_state.get('remember_me_active') and st.session_state.get('remember_token'):
             email = self.verify_session_token(st.session_state.remember_token)
             if email:
                 return email, st.session_state.remember_token
         
-        # Use a more reliable approach with hidden input and JavaScript
-        if 'checked_localStorage' not in st.session_state:
-            st.session_state.checked_localStorage = True
-            
-            # Create a hidden component to read localStorage
-            st.markdown("""
-            <div id="localStorage-reader" style="display: none;">
-                <script>
-                function checkLocalStorage() {
-                    const token = localStorage.getItem('trading_auth_token');
-                    const email = localStorage.getItem('trading_auth_email');
-                    const rememberMe = localStorage.getItem('trading_remember_me');
-                    
-                    if (token && email && rememberMe === 'true') {
-                        // Set URL parameters to pass data to Streamlit
-                        const currentUrl = new URL(window.location.href);
-                        if (!currentUrl.searchParams.has('auth_token')) {
-                            currentUrl.searchParams.set('auth_token', token);
-                            currentUrl.searchParams.set('auth_email', email);
-                            window.location.href = currentUrl.toString();
-                        }
-                    }
-                }
-                checkLocalStorage();
-                </script>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        # Check URL parameters
-        query_params = st.query_params
-        if 'auth_token' in query_params and 'auth_email' in query_params:
-            token = query_params['auth_token']
-            email = query_params['auth_email']
-            
-            # Verify token
-            verified_email = self.verify_session_token(token)
-            if verified_email == email:
-                # Clear URL parameters
-                st.query_params.clear()
-                st.session_state.remember_token = token
-                st.session_state.remember_email = email
-                st.session_state.remember_me_active = True
-                return email, token
+        # Check file-based persistence (for new sessions)
+        if os.path.exists(remember_file):
+            try:
+                with open(remember_file, 'r') as f:
+                    remember_data = json.load(f)
+                
+                token = remember_data.get('token')
+                email = remember_data.get('email')
+                
+                if token and email:
+                    # Verify token is still valid
+                    verified_email = self.verify_session_token(token)
+                    if verified_email == email:
+                        # Restore to session state
+                        st.session_state.remember_token = token
+                        st.session_state.remember_email = email
+                        st.session_state.remember_me_active = True
+                        return email, token
+                    else:
+                        # Token expired, clean up
+                        os.remove(remember_file)
+            except Exception as e:
+                # Clean up corrupted file
+                try:
+                    os.remove(remember_file)
+                except:
+                    pass
         
         return None, None
     
     def clear_remember_me(self):
         """Clear remember me data"""
         # Clear session state
-        if 'remember_token' in st.session_state:
-            del st.session_state.remember_token
-        if 'remember_email' in st.session_state:
-            del st.session_state.remember_email
-        if 'remember_me_active' in st.session_state:
-            del st.session_state.remember_me_active
+        for key in ['remember_token', 'remember_email', 'remember_me_active']:
+            if key in st.session_state:
+                del st.session_state[key]
         
-        # Clear localStorage
-        st.markdown("""
-        <script>
-        localStorage.removeItem('trading_auth_token');
-        localStorage.removeItem('trading_auth_email');
-        localStorage.removeItem('trading_remember_me');
-        </script>
-        """, unsafe_allow_html=True)
+        # Clear file
+        remember_file = "data/remember_me.json"
+        if os.path.exists(remember_file):
+            try:
+                os.remove(remember_file)
+            except:
+                pass
 
 def show_login_form():
     """Display login form"""
@@ -191,10 +182,40 @@ def show_login_form():
     }
     .stApp {
         background-color: #0e1117;
+        color: #fafafa;
     }
     /* Hide any potential sidebar content */
     .css-1d391kg {
         display: none;
+    }
+    /* Improve text visibility for dark theme */
+    .stMarkdown {
+        color: #fafafa;
+    }
+    .stTextInput > div > div > input {
+        background-color: #262730;
+        color: #fafafa;
+        border: 1px solid #444;
+    }
+    .stButton > button {
+        background-color: #ff4b4b;
+        color: white;
+        border: none;
+        border-radius: 0.5rem;
+    }
+    .stButton > button:hover {
+        background-color: #ff6c6c;
+    }
+    .stSuccess {
+        background-color: #1f4a2c;
+        color: #7fdf7f;
+    }
+    .stError {
+        background-color: #4a1f1f;
+        color: #ff7f7f;
+    }
+    h1, h2, h3 {
+        color: #fafafa !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -233,16 +254,6 @@ def show_login_form():
                 else:
                     st.error("❌ Invalid email or password")
         
-        # Default credentials info
-        with st.expander("🔑 Default Login Credentials", expanded=False):
-            st.info("""
-            **Default credentials for testing:**
-            - Email: `admin@trading.com`
-            - Password: `admin123`
-            
-            **Security Note:** Change these credentials in `data/credentials.json` after first login!
-            """)
-        
         st.markdown("---")
         st.markdown("🛡️ *Your data is protected by session-based authentication*")
 
@@ -276,26 +287,14 @@ def show_logout_option():
             st.markdown(f"📧 {st.session_state.get('user_email', '')}")
             
             if st.button("🚪 Logout", use_container_width=True):
-                # Clear session
+                # Clear session and remember me data
                 auth = SimpleAuth()
                 auth.clear_remember_me()
                 
+                # Clear all session state
                 st.session_state.authenticated = False
                 st.session_state.user_email = None
                 st.session_state.user_info = None
-                
-                if 'remember_token' in st.session_state:
-                    del st.session_state.remember_token
-                if 'remember_email' in st.session_state:
-                    del st.session_state.remember_email
-                if 'remember_me_active' in st.session_state:
-                    del st.session_state.remember_me_active
-                if 'remember_token' in st.session_state:
-                    del st.session_state.remember_token
-                
-                # Clear browser storage
-                auth = SimpleAuth()
-                auth.clear_remember_me()
                 
                 st.success("✅ Logged out successfully")
                 st.rerun()
