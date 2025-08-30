@@ -31,7 +31,7 @@ TRADING_CONFIG = {
 
 from tools.portfolio_manager import PaperTradingPortfolio
 from tools.technical_analysis import TechnicalAnalyzer
-from tools.enhanced_signals import get_daily_swing_signals, get_market_watchlists
+from tools.enhanced_signals import get_daily_swing_signals, get_market_watchlists, get_comprehensive_swing_signals, get_ultra_fast_swing_signals
 
 # Import advanced analysis modules
 try:
@@ -488,49 +488,139 @@ def show_live_signals(dashboard, selected_market):
         st.session_state.last_scan_time = None
     
     # Manual refresh controls at the top
-    col_refresh1, col_refresh2, col_refresh3 = st.columns([1, 1, 2])
+    col_refresh1, col_refresh2, col_refresh3, col_refresh4 = st.columns([1, 1, 1, 1])
     
     with col_refresh1:
-        manual_refresh = st.button("🔄 Refresh Signals", type="primary", help="Manually refresh swing trading signals")
+        manual_refresh = st.button("🔄 Quick Scan", type="primary", help="Quick scan ~73 major stocks (30 seconds)")
     
     with col_refresh2:
-        if st.session_state.last_scan_time:
-            st.write(f"⏰ Last scan: {st.session_state.last_scan_time.strftime('%H:%M:%S')}")
-        else:
-            st.write("⏰ No data loaded")
+        ultra_fast_refresh = st.button("⚡ Ultra-Fast", type="secondary", help="Ultra-fast scan of 440+ stocks (2-5 minutes)")
     
     with col_refresh3:
-        # Show recent activity
-        if 'recent_trades' in st.session_state and st.session_state.recent_trades:
-            with st.expander("📝 Recent Activity", expanded=False):
-                for trade in st.session_state.recent_trades[-3:]:  # Show last 3
-                    st.write(f"• {trade}")
-                if st.button("Clear Activity", key="clear_activity"):
-                    st.session_state.recent_trades = []
+        comprehensive_refresh = st.button("🚀 Full Scan", type="secondary", help="Comprehensive scan of 1000+ stocks (15-45 minutes)")
+    
+    with col_refresh4:
+        if st.session_state.last_scan_time:
+            scan_type = st.session_state.get('last_scan_type', 'Quick')
+            st.write(f"⏰ {scan_type}: {st.session_state.last_scan_time.strftime('%H:%M:%S')}")
+        else:
+            st.write("⏰ No data loaded")
+
+    # Scan type selection info
+    if not st.session_state.swing_data:
+        st.info("""
+        📊 **Choose Your Scan Type:**
+        
+        🔄 **Quick Scan** (~73 stocks, 30 seconds):
+        - Major US stocks (AAPL, MSFT, etc.)
+        - Top Indian stocks (RELIANCE.NS, TCS.NS, etc.)  
+        - Key Malaysian stocks (1155.KL, etc.)
+        - Best for quick market overview
+        
+        ⚡ **Ultra-Fast Scan** (~440 stocks, 2-5 minutes): **⭐ RECOMMENDED**
+        - 🇺🇸 USA: ~232 major stocks (optimized batch processing)
+        - 🇮🇳 India: ~155 NSE stocks (concurrent analysis)
+        - 🇲🇾 Malaysia: ~53 Bursa stocks (high-speed scanning)
+        - **6x more coverage in just 2-5 minutes!**
+        
+        🚀 **Full Scan** (1000+ stocks, 15-45 minutes):
+        - Deep analysis with advanced technical indicators
+        - Maximum coverage but slower processing
+        - Best for weekend comprehensive research
+        """)
     
     # Only fetch new data if manual refresh is clicked or no data exists
-    if manual_refresh or st.session_state.swing_data is None:
-        with st.spinner("🔍 Analyzing swing opportunities across markets..."):
-            from tools.enhanced_signals import get_daily_swing_signals, get_portfolio_analysis
-            
-            # Get cached market data
-            st.session_state.swing_data = get_daily_swing_signals()
-            
-            # Get fresh portfolio analysis (not cached)
-            if st.session_state.swing_data and dashboard.portfolio:
-                st.session_state.swing_data['portfolio_analysis'] = get_portfolio_analysis(dashboard.portfolio)
-            
-            st.session_state.last_scan_time = datetime.now()
+    if manual_refresh or ultra_fast_refresh or comprehensive_refresh or st.session_state.swing_data is None:
         
-        if st.session_state.swing_data:
-            st.success("✅ Signals updated successfully!")
+        # Determine scan type
+        if ultra_fast_refresh:
+            scan_type = "ULTRA_FAST"
+            scan_message = "⚡ Starting ultra-fast market scan of 440+ stocks..."
+            warning_message = "🚀 Ultra-fast scan will complete in 2-5 minutes with optimized processing!"
+        elif comprehensive_refresh:
+            scan_type = "COMPREHENSIVE"
+            scan_message = "🚀 Starting comprehensive market scan of 1000+ stocks..."
+            warning_message = "⚠️ This comprehensive scan will take 15-45 minutes. Please be patient!"
         else:
-            st.error("❌ Failed to fetch signals. Please try again.")
+            scan_type = "QUICK"
+            scan_message = "🔍 Quick scanning ~73 major stocks across markets..."
+            warning_message = None
+        
+        if warning_message:
+            if scan_type == "ULTRA_FAST":
+                st.success(warning_message)
+            else:
+                st.warning(warning_message)
+        
+        # Progress tracking for ultra-fast and comprehensive scans
+        if scan_type in ["ULTRA_FAST", "COMPREHENSIVE"]:
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            def progress_callback(message, progress):
+                progress_bar.progress(progress)
+                status_text.text(message)
+            
+            start_time = time.time()
+            
+            with st.spinner(scan_message):
+                if scan_type == "ULTRA_FAST":
+                    from tools.enhanced_signals import get_ultra_fast_swing_signals, get_portfolio_analysis
+                    
+                    st.session_state.swing_data = get_ultra_fast_swing_signals(
+                        progress_callback=progress_callback, 
+                        top_n=15  # Get more opportunities from ultra-fast scan
+                    )
+                    st.session_state.last_scan_type = "Ultra-Fast"
+                    
+                else:  # COMPREHENSIVE
+                    from tools.enhanced_signals import get_comprehensive_swing_signals, get_portfolio_analysis
+                    
+                    st.session_state.swing_data = get_comprehensive_swing_signals(
+                        progress_callback=progress_callback, 
+                        top_n=15  # Get more opportunities from comprehensive scan
+                    )
+                    st.session_state.last_scan_type = "Full Scan"
+                
+                # Get fresh portfolio analysis (not cached)
+                if st.session_state.swing_data and dashboard.portfolio:
+                    st.session_state.swing_data['portfolio_analysis'] = get_portfolio_analysis(dashboard.portfolio)
+                
+                st.session_state.last_scan_time = datetime.now()
+            
+            progress_bar.progress(1.0)
+            status_text.text(f"✅ {scan_type.replace('_', ' ').title()} scan completed!")
+            
+            elapsed_time = time.time() - start_time
+            if scan_type == "ULTRA_FAST":
+                st.success(f"⚡ Ultra-fast scan completed in {elapsed_time:.1f} seconds ({elapsed_time/60:.1f} minutes)!")
+            else:
+                st.success(f"✅ Comprehensive scan completed in {elapsed_time/60:.1f} minutes!")
+            
+        else:
+            # Quick scan
+            with st.spinner(scan_message):
+                from tools.enhanced_signals import get_daily_swing_signals, get_portfolio_analysis
+                
+                # Get cached market data
+                st.session_state.swing_data = get_daily_swing_signals()
+                
+                # Get fresh portfolio analysis (not cached)
+                if st.session_state.swing_data and dashboard.portfolio:
+                    st.session_state.swing_data['portfolio_analysis'] = get_portfolio_analysis(dashboard.portfolio)
+                
+                st.session_state.last_scan_time = datetime.now()
+                st.session_state.last_scan_type = "Quick Scan"
+            
+            if st.session_state.swing_data:
+                st.success("✅ Quick scan completed!")
+            else:
+                st.error("❌ Failed to fetch signals. Please try again.")
     
     swing_data = st.session_state.swing_data
     
     if not swing_data:
-        st.warning("🔄 Please click 'Refresh Signals' to load swing trading opportunities.")
+        st.warning("🔄 Please choose a scan type above to load swing trading opportunities.")
         return
 
     # Summary metrics - Responsive layout
@@ -538,11 +628,18 @@ def show_live_signals(dashboard, selected_market):
     strong_setups = sum(len([opp for opp in market['opportunities'] if opp['swing_score'] >= 70]) 
                        for market in swing_data['markets'].values())
     
+    # Get total stocks scanned (different for quick vs comprehensive)
+    total_scanned = swing_data.get('total_stocks_scanned', 
+                                  sum(market.get('total_scanned', 0) for market in swing_data['markets'].values()))
+    
+    scan_type = swing_data.get('scan_type', 'QUICK')
+    
     # Create responsive metric cards
     if is_mobile():
         # Stack metrics vertically on mobile
         create_metric_card("🔍 Total Opportunities", total_opportunities)
         create_metric_card("💪 Strong Setups (70+)", strong_setups)
+        create_metric_card("📊 Stocks Scanned", f"{total_scanned} ({scan_type})")
         
         portfolio_positions = len(swing_data.get('portfolio_analysis', []))
         create_metric_card("📊 Portfolio Positions", portfolio_positions)
@@ -551,7 +648,7 @@ def show_live_signals(dashboard, selected_market):
         create_metric_card("🕒 Last Update", last_update)
     else:
         # Use columns for desktop
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3, col4, col5 = st.columns(5)
         
         with col1:
             st.metric("🔍 Total Opportunities", total_opportunities)
@@ -560,12 +657,26 @@ def show_live_signals(dashboard, selected_market):
             st.metric("💪 Strong Setups (70+)", strong_setups)
         
         with col3:
+            st.metric("📊 Stocks Scanned", total_scanned, delta=f"{scan_type} scan")
+        
+        with col4:
             portfolio_positions = len(swing_data.get('portfolio_analysis', []))
             st.metric("📊 Portfolio Positions", portfolio_positions)
         
-        with col4:
+        with col5:
             last_update = swing_data['timestamp'].strftime("%H:%M")
             st.metric("🕒 Last Update", last_update)
+    
+    # Show additional scan statistics for comprehensive scans
+    if scan_type == "COMPREHENSIVE" and swing_data.get('scan_duration'):
+        scan_duration = swing_data['scan_duration']
+        st.info(f"""
+        🚀 **Comprehensive Scan Statistics:**
+        ⏱️ Total scan time: {scan_duration/60:.1f} minutes
+        📊 Stocks analyzed: {total_scanned}
+        ⚡ Average: {scan_duration/total_scanned:.2f} seconds per stock
+        🎯 Opportunities found: {total_opportunities} ({(total_opportunities/total_scanned)*100:.2f}% hit rate)
+        """)
     
     # Portfolio positions analysis (if any) - Mobile-responsive
     if swing_data.get('portfolio_analysis'):
