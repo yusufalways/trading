@@ -18,6 +18,9 @@ import os
 # Add project root to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+# Import authentication
+from auth import check_authentication, show_login_form, show_logout_option, require_authentication
+
 # Trading configuration
 TRADING_CONFIG = {
     'initial_capital': 10000,
@@ -64,7 +67,7 @@ def show_mobile_toggle():
 
 # Page configuration
 st.set_page_config(
-    page_title="Swing Trading Dashboard",
+    page_title="🔐 Secure Trading Dashboard",
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -334,11 +337,15 @@ class TradingDashboard:
         
         return 'HOLD'
 
+@require_authentication
 def main():
     dashboard = TradingDashboard()
     
     # Sidebar
     st.sidebar.title("🎯 Trading Controls")
+    
+    # Show logout option in sidebar
+    show_logout_option()
     
     # Mobile view toggle
     show_mobile_toggle()
@@ -2769,5 +2776,17 @@ def show_portfolio_settings(dashboard):
     portfolio_path = os.path.abspath("data/paper_portfolio.json")
     st.caption(f"📁 Portfolio file: `{portfolio_path}`")
 
+def app_entry_point():
+    """Main application entry point with authentication"""
+    # Initialize session state
+    if 'authenticated' not in st.session_state:
+        st.session_state.authenticated = False
+    
+    # Check authentication
+    if not check_authentication():
+        show_login_form()
+    else:
+        main()
+
 if __name__ == "__main__":
-    main()
+    app_entry_point()
