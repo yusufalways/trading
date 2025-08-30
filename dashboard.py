@@ -30,6 +30,38 @@ from tools.portfolio_manager import PaperTradingPortfolio
 from tools.technical_analysis import TechnicalAnalyzer
 from tools.enhanced_signals import get_daily_swing_signals, get_market_watchlists
 
+# Helper functions for responsive design
+def is_mobile():
+    """Detect if user is on mobile device"""
+    # For now, we'll use a simple check. In production, you could use user agent detection
+    return st.session_state.get('mobile_view', False)
+
+def create_responsive_columns(col_specs, mobile_stack=True):
+    """Create responsive columns that stack on mobile"""
+    if is_mobile() and mobile_stack:
+        return [st.container() for _ in col_specs]
+    else:
+        return st.columns(col_specs)
+
+def create_metric_card(title, value, delta=None, help_text=None):
+    """Create a responsive metric card"""
+    with st.container():
+        if delta:
+            st.metric(title, value, delta=delta, help=help_text)
+        else:
+            st.metric(title, value, help=help_text)
+
+def create_expandable_section(title, content_func, expanded=False):
+    """Create expandable sections for mobile-friendly display"""
+    with st.expander(title, expanded=expanded):
+        content_func()
+
+def show_mobile_toggle():
+    """Add mobile view toggle in sidebar"""
+    st.sidebar.markdown("---")
+    mobile_view = st.sidebar.checkbox("📱 Mobile View", value=st.session_state.get('mobile_view', False))
+    st.session_state.mobile_view = mobile_view
+
 # Page configuration
 st.set_page_config(
     page_title="Swing Trading Dashboard",
@@ -37,6 +69,137 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Add responsive CSS for mobile optimization
+st.markdown("""
+<style>
+    /* Mobile-first responsive design */
+    .main .block-container {
+        padding-top: 1rem;
+        padding-left: 1rem;
+        padding-right: 1rem;
+        max-width: 100%;
+    }
+    
+    /* Mobile optimization for small screens */
+    @media (max-width: 768px) {
+        .main .block-container {
+            padding-left: 0.5rem;
+            padding-right: 0.5rem;
+        }
+        
+        /* Stack columns on mobile */
+        .stColumns > div {
+            width: 100% !important;
+            margin-bottom: 1rem;
+        }
+        
+        /* Responsive metrics */
+        .metric-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin-bottom: 0.5rem;
+        }
+        
+        /* Responsive tables */
+        .dataframe {
+            font-size: 0.8rem;
+        }
+        
+        /* Sidebar auto-collapse on mobile */
+        .css-1d391kg {
+            width: 0px;
+        }
+        
+        /* Tab adjustments for mobile */
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 0.2rem;
+        }
+        
+        .stTabs [data-baseweb="tab"] {
+            padding: 0.3rem 0.5rem;
+            font-size: 0.8rem;
+        }
+    }
+    
+    /* Tablet optimization */
+    @media (max-width: 1024px) and (min-width: 769px) {
+        .stColumns > div {
+            min-width: 300px;
+        }
+    }
+    
+    /* Enhanced metric cards */
+    .metric-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 1rem;
+        border-radius: 10px;
+        color: white;
+        text-align: center;
+        margin-bottom: 1rem;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    
+    .metric-value {
+        font-size: 1.5rem;
+        font-weight: bold;
+        margin: 0.5rem 0;
+    }
+    
+    .metric-label {
+        font-size: 0.9rem;
+        opacity: 0.9;
+    }
+    
+    /* Expandable sections for mobile */
+    .mobile-section {
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+        overflow: hidden;
+    }
+    
+    .mobile-section-header {
+        background-color: #f8f9fa;
+        padding: 0.75rem;
+        cursor: pointer;
+        font-weight: bold;
+        border-bottom: 1px solid #e0e0e0;
+    }
+    
+    .mobile-section-content {
+        padding: 1rem;
+    }
+    
+    /* Responsive charts */
+    .js-plotly-plot {
+        width: 100% !important;
+    }
+    
+    /* Compact button styles */
+    .stButton > button {
+        width: 100%;
+        margin-bottom: 0.5rem;
+    }
+    
+    /* Responsive sidebar */
+    @media (max-width: 768px) {
+        .css-1d391kg {
+            transform: translateX(-100%);
+            transition: transform 0.3s ease;
+        }
+        
+        .css-1d391kg.open {
+            transform: translateX(0);
+        }
+    }
+</style>
+""", unsafe_allow_html=True)
 
 class TradingDashboard:
     def __init__(self):
@@ -176,6 +339,9 @@ def main():
     
     # Sidebar
     st.sidebar.title("🎯 Trading Controls")
+    
+    # Mobile view toggle
+    show_mobile_toggle()
     
     # Market selection
     selected_market = st.sidebar.selectbox(
@@ -353,209 +519,312 @@ def show_live_signals(dashboard, selected_market):
     if not swing_data:
         st.warning("🔄 Please click 'Refresh Signals' to load swing trading opportunities.")
         return
-    
-    # Summary metrics
+
+    # Summary metrics - Responsive layout
     total_opportunities = sum(len(market['opportunities']) for market in swing_data['markets'].values())
     strong_setups = sum(len([opp for opp in market['opportunities'] if opp['swing_score'] >= 70]) 
                        for market in swing_data['markets'].values())
     
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric("🔍 Total Opportunities", total_opportunities)
-    
-    with col2:
-        st.metric("💪 Strong Setups (70+)", strong_setups)
-    
-    with col3:
-        portfolio_positions = len(swing_data.get('portfolio_analysis', []))
-        st.metric("📊 Portfolio Positions", portfolio_positions)
-    
-    with col4:
-        last_update = swing_data['timestamp'].strftime("%H:%M")
-        st.metric("🕒 Last Update", last_update)
-    
-    # Portfolio positions analysis (if any)
-    if swing_data.get('portfolio_analysis'):
-        st.subheader("🎯 Current Portfolio Analysis")
-        st.markdown("**Your existing positions with updated swing analysis:**")
+    # Create responsive metric cards
+    if is_mobile():
+        # Stack metrics vertically on mobile
+        create_metric_card("🔍 Total Opportunities", total_opportunities)
+        create_metric_card("💪 Strong Setups (70+)", strong_setups)
         
-        for position in swing_data['portfolio_analysis']:
-            symbol = position['symbol']
-            action = position['action']
-            pnl_pct = position['pnl_pct']
-            current_price = position['current_price']
+        portfolio_positions = len(swing_data.get('portfolio_analysis', []))
+        create_metric_card("📊 Portfolio Positions", portfolio_positions)
+        
+        last_update = swing_data['timestamp'].strftime("%H:%M")
+        create_metric_card("🕒 Last Update", last_update)
+    else:
+        # Use columns for desktop
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("🔍 Total Opportunities", total_opportunities)
+        
+        with col2:
+            st.metric("💪 Strong Setups (70+)", strong_setups)
+        
+        with col3:
+            portfolio_positions = len(swing_data.get('portfolio_analysis', []))
+            st.metric("📊 Portfolio Positions", portfolio_positions)
+        
+        with col4:
+            last_update = swing_data['timestamp'].strftime("%H:%M")
+            st.metric("🕒 Last Update", last_update)
+    
+    # Portfolio positions analysis (if any) - Mobile-responsive
+    if swing_data.get('portfolio_analysis'):
+        
+        def show_portfolio_analysis():
+            st.markdown("**Your existing positions with updated swing analysis:**")
             
-            # Color coding for actions
-            if action in ['SELL', 'PARTIAL_SELL']:
-                action_color = "🟢"
-                action_text = f"**{action}**"
-            elif action in ['STOP_LOSS', 'WATCH_CLOSE']:
-                action_color = "🔴"
-                action_text = f"**{action}**"
-            else:
-                action_color = "🟡"
-                action_text = action
-            
-            # Price formatting
-            if '.NS' in symbol:
-                price_str = f"₹{current_price:.2f}"
-            elif '.KL' in symbol:
-                price_str = f"RM{current_price:.2f}"
-            else:
-                price_str = f"${current_price:.2f}"
-            
-            with st.expander(f"{action_color} {symbol} | {price_str} | P&L: {pnl_pct:+.1f}% | {action_text}"):
-                col1, col2 = st.columns(2)
+            for position in swing_data['portfolio_analysis']:
+                symbol = position['symbol']
+                action = position['action']
+                pnl_pct = position['pnl_pct']
+                current_price = position['current_price']
                 
-                with col1:
-                    st.write("**Position Details:**")
-                    st.write(f"• Entry Price: {price_str.replace(str(current_price), str(position['entry_price']))}")
-                    st.write(f"• Shares: {position['shares']}")
-                    st.write(f"• Current P&L: {pnl_pct:+.1f}%")
+                # Color coding for actions
+                if action in ['SELL', 'PARTIAL_SELL']:
+                    action_color = "🟢"
+                    action_text = f"**{action}**"
+                elif action in ['STOP_LOSS', 'WATCH_CLOSE']:
+                    action_color = "🔴"
+                    action_text = f"**{action}**"
+                else:
+                    action_color = "🟡"
+                    action_text = action
                 
-                with col2:
-                    st.write("**Analysis Signals:**")
-                    for signal in position['signals'][:3]:
-                        st.write(f"• {signal}")
+                # Price formatting
+                if '.NS' in symbol:
+                    price_str = f"₹{current_price:.2f}"
+                elif '.KL' in symbol:
+                    price_str = f"RM{current_price:.2f}"
+                else:
+                    price_str = f"${current_price:.2f}"
                 
-                # Action buttons
-                if action == 'SELL':
-                    if st.button(f"🔴 SELL ALL {symbol}", key=f"sell_{symbol}"):
-                        result = dashboard.portfolio.sell_stock(symbol, current_price, 
-                                                              shares=position['shares'], 
-                                                              reason="SWING_SIGNAL")
-                        if result['success']:
-                            st.success(f"✅ {result['message']}")
-                            st.rerun()
-                        else:
-                            st.error(f"❌ {result['message']}")
-                
-                elif action == 'PARTIAL_SELL':
-                    sell_qty = st.number_input(f"Shares to sell ({symbol}):", 
-                                             min_value=1, 
-                                             max_value=position['shares'],
-                                             value=min(position['shares'] // 2, 10),
-                                             key=f"partial_{symbol}")
-                    if st.button(f"📉 PARTIAL SELL {symbol}", key=f"partial_sell_{symbol}"):
-                        result = dashboard.portfolio.sell_stock(symbol, current_price, 
-                                                              shares=sell_qty, 
-                                                              reason="PARTIAL_PROFIT")
-                        if result['success']:
-                            st.success(f"✅ {result['message']}")
-                            st.rerun()
-                        else:
-                            st.error(f"❌ {result['message']}")
+                with st.expander(f"{action_color} {symbol} | {price_str} | P&L: {pnl_pct:+.1f}% | {action_text}"):
+                    if is_mobile():
+                        # Stack vertically on mobile
+                        st.write("**Position Details:**")
+                        st.write(f"• Entry Price: {price_str.replace(str(current_price), str(position['entry_price']))}")
+                        st.write(f"• Shares: {position['shares']}")
+                        st.write(f"• Current P&L: {pnl_pct:+.1f}%")
+                        
+                        st.write("**Analysis Signals:**")
+                        for signal in position['signals'][:3]:
+                            st.write(f"• {signal}")
+                        
+                        # Action buttons - mobile layout
+                        st.write("**Actions:**")
+                        if action == 'SELL':
+                            if st.button(f"🔴 SELL ALL {symbol}", key=f"sell_{symbol}"):
+                                result = dashboard.portfolio.sell_stock(symbol, current_price, 
+                                                                      shares=position['shares'], 
+                                                                      reason="SWING_SIGNAL")
+                                if result['success']:
+                                    st.success(f"✅ {result['message']}")
+                                    st.rerun()
+                                else:
+                                    st.error(f"❌ {result['message']}")
+                        
+                        elif action == 'PARTIAL_SELL':
+                            sell_qty = st.number_input(f"Shares to sell ({symbol}):", 
+                                                     min_value=1, 
+                                                     max_value=position['shares'],
+                                                     value=min(position['shares'] // 2, 10),
+                                                     key=f"partial_{symbol}")
+                            if st.button(f"📉 PARTIAL SELL {symbol}", key=f"partial_sell_{symbol}"):
+                                result = dashboard.portfolio.sell_stock(symbol, current_price, 
+                                                                      shares=sell_qty, 
+                                                                      reason="PARTIAL_PROFIT")
+                                if result['success']:
+                                    st.success(f"✅ {result['message']}")
+                                    st.rerun()
+                                else:
+                                    st.error(f"❌ {result['message']}")
+                    else:
+                        # Use columns for desktop
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.write("**Position Details:**")
+                            st.write(f"• Entry Price: {price_str.replace(str(current_price), str(position['entry_price']))}")
+                            st.write(f"• Shares: {position['shares']}")
+                            st.write(f"• Current P&L: {pnl_pct:+.1f}%")
+                        
+                        with col2:
+                            st.write("**Analysis Signals:**")
+                            for signal in position['signals'][:3]:
+                                st.write(f"• {signal}")
+                        
+                        # Action buttons - desktop layout
+                        if action == 'SELL':
+                            if st.button(f"🔴 SELL ALL {symbol}", key=f"sell_{symbol}"):
+                                result = dashboard.portfolio.sell_stock(symbol, current_price, 
+                                                                      shares=position['shares'], 
+                                                                      reason="SWING_SIGNAL")
+                                if result['success']:
+                                    st.success(f"✅ {result['message']}")
+                                    st.rerun()
+                                else:
+                                    st.error(f"❌ {result['message']}")
+                        
+                        elif action == 'PARTIAL_SELL':
+                            sell_col1, sell_col2 = st.columns(2)
+                            with sell_col1:
+                                sell_qty = st.number_input(f"Shares to sell ({symbol}):", 
+                                                         min_value=1, 
+                                                         max_value=position['shares'],
+                                                         value=min(position['shares'] // 2, 10),
+                                                         key=f"partial_{symbol}")
+                            with sell_col2:
+                                if st.button(f"📉 PARTIAL SELL {symbol}", key=f"partial_sell_{symbol}"):
+                                    result = dashboard.portfolio.sell_stock(symbol, current_price, 
+                                                                          shares=sell_qty, 
+                                                                          reason="PARTIAL_PROFIT")
+                                    if result['success']:
+                                        st.success(f"✅ {result['message']}")
+                                        st.rerun()
+                                    else:
+                                        st.error(f"❌ {result['message']}")
+        
+        if is_mobile():
+            create_expandable_section("🎯 Current Portfolio Analysis", show_portfolio_analysis, expanded=True)
+        else:
+            st.subheader("🎯 Current Portfolio Analysis")
+            show_portfolio_analysis()
         
         st.markdown("---")
     
-    # Market opportunities
-    st.subheader("🌍 Top 5 Swing Opportunities by Market")
-    
-    for market_key, market_data in swing_data['markets'].items():
-        market_name = market_data['name']
-        opportunities = market_data['opportunities']
-        
-        if opportunities:
-            st.markdown(f"### {market_name}")
-            
-            # Create DataFrame for display
-            display_data = []
-            for opp in opportunities:
-                symbol = opp['symbol']
-                price = opp['current_price']
-                score = opp['swing_score']
-                recommendation = opp['recommendation']
-                entry_type = opp['entry_type']
-                risk_reward = opp['risk_reward']
-                
-                # Format price
-                if '.NS' in symbol:
-                    price_str = f"₹{price:.2f}"
-                elif '.KL' in symbol:
-                    price_str = f"RM{price:.2f}"
-                else:
-                    price_str = f"${price:.2f}"
-                
-                display_data.append({
-                    'Symbol': symbol,
-                    'Price': price_str,
-                    'Score': score,
-                    'Signal': recommendation,
-                    'Setup': entry_type,
-                    'R:R': risk_reward,
-                    'Key Signals': ', '.join(opp['signals'][:2])
-                })
-            
-            df = pd.DataFrame(display_data)
-            
-            # Style the dataframe
-            def highlight_signals(val):
-                if val == 'STRONG BUY':
-                    return 'background-color: #90EE90'
-                elif val == 'BUY':
-                    return 'background-color: #98FB98'
-                elif val == 'WATCH':
-                    return 'background-color: #FFFFE0'
-                return ''
-            
-            styled_df = df.style.map(highlight_signals, subset=['Signal'])
-            st.dataframe(styled_df, use_container_width=True, hide_index=True)
-            
-            # Trading buttons for top opportunities
-            st.markdown("**Quick Trading Actions:**")
-            action_cols = st.columns(min(5, len(opportunities)))
-            
-            for i, (opp, col) in enumerate(zip(opportunities, action_cols)):
-                with col:
-                    symbol = opp['symbol']
-                    price = opp['current_price']
-                    score = opp['swing_score']
-                    
-                    if score >= 70:
-                        button_color = "🟢"
-                        button_text = f"BUY {symbol}"
-                    else:
-                        button_color = "🟡"
-                        button_text = f"WATCH {symbol}"
-                    
-                    if st.button(f"{button_color} {button_text}", key=f"trade_{symbol}_{i}"):
-                        if score >= 70:
-                            # Execute buy order
-                            result = dashboard.portfolio.buy_stock(symbol, price, 
-                                                                 confidence=score, 
-                                                                 shares=10)
-                            if result['success']:
-                                st.success(f"✅ Bought {symbol}")
-                                st.rerun()
-                            else:
-                                st.error(f"❌ {result['message']}")
-                        else:
-                            st.info(f"Added {symbol} to watchlist")
-        else:
-            st.markdown(f"### {market_name}")
-            st.info(f"No strong swing opportunities found in {market_name} market today.")
-    
-    # Market scanning summary
-    st.markdown("---")
-    st.subheader("📊 Scanning Summary")
-    
-    summary_cols = st.columns(3)
-    for i, (market_key, market_data) in enumerate(swing_data['markets'].items()):
-        with summary_cols[i]:
+    # Market opportunities - Mobile responsive
+    def show_market_opportunities():
+        for market_key, market_data in swing_data['markets'].items():
             market_name = market_data['name']
-            scanned = market_data['total_scanned']
-            found = market_data['opportunities_found']
+            opportunities = market_data['opportunities']
             
-            st.metric(
-                f"{market_name}",
-                f"{found} opportunities",
-                f"from {scanned} stocks"
-            )
+            if opportunities:
+                
+                def show_market_data():
+                    if is_mobile():
+                        # Mobile-friendly card layout
+                        for i, opp in enumerate(opportunities, 1):
+                            symbol = opp['symbol']
+                            price = opp['current_price']
+                            score = opp['swing_score']
+                            recommendation = opp['recommendation']
+                            entry_type = opp['entry_type']
+                            risk_reward = opp['risk_reward']
+                            
+                            # Format price
+                            if '.NS' in symbol:
+                                price_str = f"₹{price:.2f}"
+                            elif '.KL' in symbol:
+                                price_str = f"RM{price:.2f}"
+                            else:
+                                price_str = f"${price:.2f}"
+                            
+                            # Color code based on score
+                            if score >= 80:
+                                score_color = "🟢"
+                            elif score >= 60:
+                                score_color = "🟡"
+                            else:
+                                score_color = "🔴"
+                            
+                            with st.container():
+                                st.markdown(f"""
+                                **#{i} {symbol}** {score_color} **Score: {score}**
+                                - **Price**: {price_str}
+                                - **Signal**: {recommendation}
+                                - **Setup**: {entry_type}  
+                                - **Risk:Reward**: {risk_reward}
+                                - **Signals**: {', '.join(opp['signals'][:2])}
+                                """)
+                                
+                                # Buy button for mobile
+                                if st.button(f"🟢 BUY {symbol}", key=f"buy_{symbol}_{market_key}"):
+                                    st.session_state.selected_stock_for_buy = opp
+                                    st.rerun()
+                                
+                                st.markdown("---")
+                    
+                    else:
+                        # Desktop table layout
+                        display_data = []
+                        for opp in opportunities:
+                            symbol = opp['symbol']
+                            price = opp['current_price']
+                            score = opp['swing_score']
+                            recommendation = opp['recommendation']
+                            entry_type = opp['entry_type']
+                            risk_reward = opp['risk_reward']
+                            
+                            # Format price
+                            if '.NS' in symbol:
+                                price_str = f"₹{price:.2f}"
+                            elif '.KL' in symbol:
+                                price_str = f"RM{price:.2f}"
+                            else:
+                                price_str = f"${price:.2f}"
+                            
+                            display_data.append({
+                                'Symbol': symbol,
+                                'Price': price_str,
+                                'Score': score,
+                                'Signal': recommendation,
+                                'Setup': entry_type,
+                                'R:R': risk_reward,
+                                'Key Signals': ', '.join(opp['signals'][:2])
+                            })
+                        
+                        df = pd.DataFrame(display_data)
+                        st.dataframe(df, use_container_width=True)
+                        
+                        # Action buttons for desktop
+                        if len(opportunities) > 0:
+                            st.markdown("**Quick Actions:**")
+                            action_cols = create_responsive_columns([1]*min(5, len(opportunities)), mobile_stack=False)
+                            
+                            for i, (col, opp) in enumerate(zip(action_cols, opportunities[:5])):
+                                with col:
+                                    if st.button(f"🟢 BUY {opp['symbol']}", key=f"buy_{opp['symbol']}_{market_key}"):
+                                        st.session_state.selected_stock_for_buy = opp
+                                        st.rerun()
+                
+                if is_mobile():
+                    create_expandable_section(f"{market_name} ({len(opportunities)} opportunities)", show_market_data, expanded=True)
+                else:
+                    st.markdown(f"### {market_name}")
+                    show_market_data()
+            
+            else:
+                if not is_mobile():
+                    st.info(f"No strong swing opportunities found in {market_name} market today.")
     
-    # Market scanning summary
+    if is_mobile():
+        create_expandable_section("🌍 Market Opportunities", show_market_opportunities, expanded=True)
+    else:
+        st.subheader("🌍 Top 5 Swing Opportunities by Market")
+        show_market_opportunities()
+    
+    # Market scanning summary - Responsive
+    def show_scanning_summary():
+        if is_mobile():
+            # Stack summary vertically on mobile
+            for market_key, market_data in swing_data['markets'].items():
+                market_name = market_data['name']
+                scanned = market_data['total_scanned']
+                found = market_data['opportunities_found']
+                
+                create_metric_card(
+                    f"{market_name}",
+                    f"{found} opportunities",
+                    f"from {scanned} stocks"
+                )
+        else:
+            # Use columns for desktop
+            summary_cols = st.columns(3)
+            for i, (market_key, market_data) in enumerate(swing_data['markets'].items()):
+                with summary_cols[i % 3]:
+                    market_name = market_data['name']
+                    scanned = market_data['total_scanned']
+                    found = market_data['opportunities_found']
+                    
+                    st.metric(
+                        f"{market_name}",
+                        f"{found} opportunities",
+                        f"from {scanned} stocks"
+                    )
+    
     st.markdown("---")
-    st.subheader("📊 Scanning Summary")
+    if is_mobile():
+        create_expandable_section("📊 Scanning Summary", show_scanning_summary, expanded=False)
+    else:
+        st.subheader("📊 Scanning Summary")
+        show_scanning_summary()
     
     summary_cols = st.columns(3)
     for i, (market_key, market_data) in enumerate(swing_data['markets'].items()):
@@ -1279,13 +1548,12 @@ def show_live_signals(dashboard, selected_market):
 
 
 def show_portfolio(dashboard):
-    """Display portfolio overview"""
+    """Display portfolio overview - Mobile responsive"""
     st.header("💼 Portfolio Overview")
     
-    # Quick actions at the top
-    action_col1, action_col2, action_col3 = st.columns([2, 1, 1])
-    
-    with action_col2:
+    # Quick actions at the top - Responsive
+    if is_mobile():
+        # Stack actions vertically on mobile
         if st.button("🔄 Reset Portfolio", key="quick_reset_portfolio", type="secondary"):
             with st.spinner("Resetting portfolio..."):
                 result = dashboard.portfolio.reset_portfolio()
@@ -1294,8 +1562,7 @@ def show_portfolio(dashboard):
                     st.rerun()
                 else:
                     st.error(f"❌ Reset failed: {result['message']}")
-    
-    with action_col3:
+        
         if st.button("🗑️ Clear History", key="quick_clear_history", type="secondary"):
             with st.spinner("Clearing history..."):
                 result = dashboard.portfolio.clear_history()
@@ -1304,6 +1571,29 @@ def show_portfolio(dashboard):
                     st.rerun()
                 else:
                     st.error(f"❌ Clear failed: {result['message']}")
+    else:
+        # Use columns for desktop
+        action_col1, action_col2, action_col3 = st.columns([2, 1, 1])
+        
+        with action_col2:
+            if st.button("🔄 Reset Portfolio", key="quick_reset_portfolio", type="secondary"):
+                with st.spinner("Resetting portfolio..."):
+                    result = dashboard.portfolio.reset_portfolio()
+                    if result['success']:
+                        st.success("✅ Portfolio reset successfully!")
+                        st.rerun()
+                    else:
+                        st.error(f"❌ Reset failed: {result['message']}")
+        
+        with action_col3:
+            if st.button("🗑️ Clear History", key="quick_clear_history", type="secondary"):
+                with st.spinner("Clearing history..."):
+                    result = dashboard.portfolio.clear_history()
+                    if result['success']:
+                        st.success("✅ History cleared successfully!")
+                        st.rerun()
+                    else:
+                        st.error(f"❌ Clear failed: {result['message']}")
     
     st.markdown("---")
     
@@ -1314,29 +1604,88 @@ def show_portfolio(dashboard):
     metrics = dashboard.portfolio.get_performance_metrics()
     positions = dashboard.portfolio.get_current_positions()
     
-    # Separate Currency Portfolio Overview
-    st.subheader("💱 Multi-Currency Portfolio Summary")
+    # Multi-Currency Portfolio Overview - Responsive
+    def show_currency_overview():
+        currency_metrics = metrics['currency_metrics']
+        
+        if is_mobile():
+            # Stack currency summaries vertically on mobile
+            for currency, symbol in [('USD', '🇺🇸'), ('INR', '🇮🇳'), ('MYR', '🇲🇾')]:
+                data = currency_metrics[currency]
+                currency_symbol = '$' if currency == 'USD' else '₹' if currency == 'INR' else 'RM'
+                
+                with st.container():
+                    st.markdown(f"### {symbol} {currency} Portfolio")
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.metric(
+                            "💰 Portfolio Value",
+                            f"{currency_symbol}{data['current_value']:,.2f}",
+                            f"{currency_symbol}{data['total_return']:,.2f}"
+                        )
+                    
+                    with col2:
+                        st.metric(
+                            "📈 Performance",
+                            f"{data['return_pct']:.2f}%",
+                            f"{currency_symbol}{data['cash']:,.2f} cash"
+                        )
+                    
+                    st.markdown("---")
+        else:
+            # Use columns for desktop
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                usd_data = currency_metrics['USD']
+                st.markdown("### 🇺🇸 USD Portfolio")
+                st.metric(
+                    "💰 Portfolio Value",
+                    f"${usd_data['current_value']:,.2f}",
+                    f"${usd_data['total_return']:,.2f}"
+                )
+                st.metric(
+                    "📈 Performance", 
+                    f"{usd_data['return_pct']:.2f}%",
+                    f"${usd_data['cash']:,.2f} cash"
+                )
+            
+            with col2:
+                inr_data = currency_metrics['INR']
+                st.markdown("### 🇮🇳 INR Portfolio")
+                st.metric(
+                    "💰 Portfolio Value",
+                    f"₹{inr_data['current_value']:,.2f}",
+                    f"₹{inr_data['total_return']:,.2f}"
+                )
+                st.metric(
+                    "📈 Performance",
+                    f"{inr_data['return_pct']:.2f}%",
+                    f"₹{inr_data['cash']:,.2f} cash"
+                )
+            
+            with col3:
+                myr_data = currency_metrics['MYR']
+                st.markdown("### �� MYR Portfolio")
+                st.metric(
+                    "💰 Portfolio Value",
+                    f"RM{myr_data['current_value']:,.2f}",
+                    f"RM{myr_data['total_return']:,.2f}"
+                )
+                st.metric(
+                    "📈 Performance",
+                    f"{myr_data['return_pct']:.2f}%",
+                    f"RM{myr_data['cash']:,.2f} cash"
+                )
     
-    # Create three columns for each currency
-    col1, col2, col3 = st.columns(3)
+    if is_mobile():
+        create_expandable_section("💱 Multi-Currency Portfolio Summary", show_currency_overview, expanded=True)
+    else:
+        st.subheader("💱 Multi-Currency Portfolio Summary")
+        show_currency_overview()
     
-    currency_metrics = metrics['currency_metrics']
-    
-    with col1:
-        usd_data = currency_metrics['USD']
-        st.markdown("### 🇺🇸 USD Portfolio")
-        st.metric(
-            "💰 Portfolio Value",
-            f"${usd_data['current_value']:,.2f}",
-            f"${usd_data['total_return']:,.2f}"
-        )
-        st.metric(
-            "📈 Return",
-            f"{usd_data['total_return_pct']:.2f}%",
-            delta=f"{usd_data['total_return_pct']:.2f}%"
-        )
-        st.metric("💵 Cash", f"${usd_data['cash']:,.2f}")
-        st.metric("📊 Positions", usd_data['positions_count'])
+    st.markdown("---")
     
     with col2:
         inr_data = currency_metrics['INR']
