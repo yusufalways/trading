@@ -900,27 +900,22 @@ def show_live_signals(dashboard, selected_market):
         if 'analysis_depth' not in st.session_state:
             st.session_state.analysis_depth = "Comprehensive"
         
-        # Stock selection for detailed analysis
+        # Stock selection for detailed analysis - Responsive
         stock_symbols = [f"{opp['symbol']} ({opp['market_name']}) - Score: {opp['swing_score']}" for opp in all_opportunities]
         
-        col1, col2 = st.columns([2, 1])
-        
-        with col1:
-            # Use session state for persistence
+        if is_mobile():
+            # Mobile layout - stack controls vertically
+            st.markdown("🔍 **Select stocks for detailed analysis:**")
             default_selection = stock_symbols[:3] if not st.session_state.selected_stocks_for_analysis else st.session_state.selected_stocks_for_analysis
             
             selected_stocks = st.multiselect(
-                "🔍 Select stocks for detailed analysis:",
+                "Choose up to 5 stocks:",
                 stock_symbols,
-                default=[s for s in default_selection if s in stock_symbols],  # Filter valid options
+                default=[s for s in default_selection if s in stock_symbols],
                 help="Choose up to 5 stocks for comprehensive technical analysis",
                 key="detailed_analysis_selector"
             )
             
-            # Update session state
-            st.session_state.selected_stocks_for_analysis = selected_stocks
-        
-        with col2:
             analysis_depth = st.selectbox(
                 "📊 Analysis Depth:",
                 ["Essential", "Comprehensive", "Expert"],
@@ -928,9 +923,34 @@ def show_live_signals(dashboard, selected_market):
                 help="Essential: Key levels only | Comprehensive: Full analysis | Expert: All indicators",
                 key="analysis_depth_selector"
             )
+        else:
+            # Desktop layout - use columns
+            col1, col2 = st.columns([2, 1])
             
-            # Update session state
-            st.session_state.analysis_depth = analysis_depth
+            with col1:
+                # Use session state for persistence
+                default_selection = stock_symbols[:3] if not st.session_state.selected_stocks_for_analysis else st.session_state.selected_stocks_for_analysis
+                
+                selected_stocks = st.multiselect(
+                    "🔍 Select stocks for detailed analysis:",
+                    stock_symbols,
+                    default=[s for s in default_selection if s in stock_symbols],  # Filter valid options
+                    help="Choose up to 5 stocks for comprehensive technical analysis",
+                    key="detailed_analysis_selector"
+                )
+            
+            with col2:
+                analysis_depth = st.selectbox(
+                    "📊 Analysis Depth:",
+                    ["Essential", "Comprehensive", "Expert"],
+                    index=["Essential", "Comprehensive", "Expert"].index(st.session_state.analysis_depth),
+                    help="Essential: Key levels only | Comprehensive: Full analysis | Expert: All indicators",
+                    key="analysis_depth_selector"
+                )
+        
+        # Update session state
+        st.session_state.selected_stocks_for_analysis = selected_stocks
+        st.session_state.analysis_depth = analysis_depth
         
         # Generate detailed analysis for selected stocks
         for stock_option in selected_stocks[:5]:  # Limit to 5 for performance
@@ -1628,7 +1648,7 @@ def show_portfolio(dashboard):
                     with col2:
                         st.metric(
                             "📈 Performance",
-                            f"{data['return_pct']:.2f}%",
+                            f"{data.get('total_return_pct', 0):.2f}%",
                             f"{currency_symbol}{data['cash']:,.2f} cash"
                         )
                     
@@ -1647,7 +1667,7 @@ def show_portfolio(dashboard):
                 )
                 st.metric(
                     "📈 Performance", 
-                    f"{usd_data['return_pct']:.2f}%",
+                    f"{usd_data.get('total_return_pct', 0):.2f}%",
                     f"${usd_data['cash']:,.2f} cash"
                 )
             
@@ -1661,7 +1681,7 @@ def show_portfolio(dashboard):
                 )
                 st.metric(
                     "📈 Performance",
-                    f"{inr_data['return_pct']:.2f}%",
+                    f"{inr_data.get('total_return_pct', 0):.2f}%",
                     f"₹{inr_data['cash']:,.2f} cash"
                 )
             
@@ -1675,7 +1695,7 @@ def show_portfolio(dashboard):
                 )
                 st.metric(
                     "📈 Performance",
-                    f"{myr_data['return_pct']:.2f}%",
+                    f"{myr_data.get('total_return_pct', 0):.2f}%",
                     f"RM{myr_data['cash']:,.2f} cash"
                 )
     
@@ -1687,9 +1707,9 @@ def show_portfolio(dashboard):
     
     st.markdown("---")
     
-    with col2:
-        inr_data = currency_metrics['INR']
-        st.markdown("### 🇮🇳 INR Portfolio")
+    
+    # Current positions
+    if positions:
         st.metric(
             "💰 Portfolio Value",
             f"₹{inr_data['current_value']:,.2f}",
