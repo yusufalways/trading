@@ -1016,265 +1016,260 @@ def show_live_signals(dashboard, selected_market):
                     with metric_col5:
                         st.metric("Setup Type", entry_type)
                 
-                # Detailed analysis sections - Mobile Responsive
-                if is_mobile():
-                    # Mobile: Use expandable sections for better organization
-                    with st.container():
-                        # Support & Resistance Analysis
-                        with st.expander("🎯 Support & Resistance Levels", expanded=True):
-                            # Get detailed levels from the analysis
-                            support_levels = selected_stock.get('support_levels', [price * 0.95, price * 0.90])
-                            resistance_levels = selected_stock.get('resistance_levels', [price * 1.05, price * 1.10])
-                            
-                            # Current position relative to levels
-                            nearest_support = max([level for level in support_levels if level <= price], default=price * 0.95)
-                            nearest_resistance = min([level for level in resistance_levels if level >= price], default=price * 1.05)
-                            
-                            support_distance = ((price - nearest_support) / price) * 100
-                            resistance_distance = ((nearest_resistance - price) / price) * 100
-                            
-                            # Support levels
-                            st.markdown("**🟢 Support Levels:**")
-                            for i, level in enumerate(sorted(support_levels, reverse=True)[:3]):
-                                distance = ((price - level) / price) * 100
-                                strength = "Strong" if i == 0 else "Medium" if i == 1 else "Weak"
-                                st.write(f"• **{strength}**: {currency_symbol}{level:.2f} ({distance:+.1f}%)")
-                            
-                            # Resistance levels  
-                            st.markdown("**🔴 Resistance Levels:**")
-                            for i, level in enumerate(sorted(resistance_levels)[:3]):
-                                distance = ((level - price) / price) * 100
-                                strength = "Strong" if i == 0 else "Medium" if i == 1 else "Weak"
-                                st.write(f"• **{strength}**: {currency_symbol}{level:.2f} (+{distance:.1f}%)")
-                            
-                            # Position analysis
-                            st.markdown("**📍 Current Position:**")
-                            if support_distance <= 3:
-                                st.success(f"✅ Near Support ({support_distance:.1f}% above)")
-                            elif resistance_distance <= 3:
-                                st.warning(f"⚠️ Near Resistance ({resistance_distance:.1f}% below)")
-                            else:
-                                st.info("🎯 In middle range - good for swing entry")
+                # Detailed analysis sections - Vertical layout for all screen sizes
+                # This provides better readability as requested
+                
+                # Section 1: Support & Resistance Analysis
+                st.markdown("### 🎯 **Support & Resistance Levels**")
+                
+                # Get detailed levels from the analysis
+                support_levels = selected_stock.get('support_levels', [price * 0.95, price * 0.90])
+                resistance_levels = selected_stock.get('resistance_levels', [price * 1.05, price * 1.10])
+                
+                # Current position relative to levels
+                nearest_support = max([level for level in support_levels if level <= price], default=price * 0.95)
+                nearest_resistance = min([level for level in resistance_levels if level >= price], default=price * 1.05)
+                
+                support_distance = ((price - nearest_support) / price) * 100
+                resistance_distance = ((nearest_resistance - price) / price) * 100
+                
+                # Support levels
+                st.markdown("**🟢 Support Levels:**")
+                for i, level in enumerate(sorted(support_levels, reverse=True)[:3]):
+                    distance = ((price - level) / price) * 100
+                    strength = "Strong" if i == 0 else "Medium" if i == 1 else "Weak"
+                    st.write(f"• **{strength}**: {currency_symbol}{level:.2f} ({distance:+.1f}%)")
+                
+                # Resistance levels  
+                st.markdown("**🔴 Resistance Levels:**")
+                for i, level in enumerate(sorted(resistance_levels)[:3]):
+                    distance = ((level - price) / price) * 100
+                    strength = "Strong" if i == 0 else "Medium" if i == 1 else "Weak"
+                    st.write(f"• **{strength}**: {currency_symbol}{level:.2f} (+{distance:.1f}%)")
+                
+                # Position analysis
+                st.markdown("**📍 Current Position:**")
+                if support_distance <= 3:
+                    st.success(f"✅ Near Support ({support_distance:.1f}% above)")
+                elif resistance_distance <= 3:
+                    st.warning(f"⚠️ Near Resistance ({resistance_distance:.1f}% below)")
                 else:
-                    # Desktop: Three-column layout for detailed analysis
-                    analysis_col1, analysis_col2, analysis_col3 = st.columns([1, 1, 1])
-                    
-                    # Column 1: Support & Resistance Analysis
-                    with analysis_col1:
-                        st.markdown("### 🎯 **Support & Resistance Levels**")
-                    
-                    # Get detailed levels from the analysis
-                    support_levels = selected_stock.get('support_levels', [price * 0.95, price * 0.90])
-                    resistance_levels = selected_stock.get('resistance_levels', [price * 1.05, price * 1.10])
-                    
-                    # Current position relative to levels
-                    nearest_support = max([level for level in support_levels if level <= price], default=price * 0.95)
-                    nearest_resistance = min([level for level in resistance_levels if level >= price], default=price * 1.05)
-                    
-                    support_distance = ((price - nearest_support) / price) * 100
-                    resistance_distance = ((nearest_resistance - price) / price) * 100
-                    
-                    # Support levels
-                    st.markdown("**🟢 Support Levels:**")
-                    for i, level in enumerate(sorted(support_levels, reverse=True)[:3]):
-                        distance = ((price - level) / price) * 100
-                        strength = "Strong" if i == 0 else "Medium" if i == 1 else "Weak"
-                        st.write(f"• **{strength}**: {currency_symbol}{level:.2f} ({distance:+.1f}%)")
-                    
-                    # Resistance levels  
-                    st.markdown("**🔴 Resistance Levels:**")
-                    for i, level in enumerate(sorted(resistance_levels)[:3]):
-                        distance = ((level - price) / price) * 100
-                        strength = "Strong" if i == 0 else "Medium" if i == 1 else "Weak"
-                        st.write(f"• **{strength}**: {currency_symbol}{level:.2f} (+{distance:.1f}%)")
-                    
-                    # Position analysis
-                    st.markdown("**📍 Current Position:**")
-                    if support_distance <= 3:
-                        st.success(f"✅ Near Support ({support_distance:.1f}% above)")
-                    elif resistance_distance <= 3:
-                        st.warning(f"⚠️ Near Resistance ({resistance_distance:.1f}% below)")
-                    else:
-                        st.info("🎯 In middle range - good for swing entry")
+                    st.info("🎯 In middle range - good for swing entry")
                 
-                # Column 2: Technical Indicators
-                with analysis_col2:
-                    st.markdown("### 📊 **Technical Indicators**")
-                    
-                    # Get technical data from enhanced analysis
-                    rsi = selected_stock.get('rsi', 45 + (score - 50) * 0.6)
-                    macd_signal = selected_stock.get('macd_signal_trend', 'Bullish' if score > 60 else 'Bearish')
-                    volume_trend = selected_stock.get('volume_trend', 'High' if score > 70 else 'Normal')
-                    bollinger = selected_stock.get('bollinger_bands', {})
-                    stochastic = selected_stock.get('stochastic', 50)
-                    trend_strength = selected_stock.get('trend_strength', 'Neutral')
-                    momentum = selected_stock.get('momentum', 0)
-                    volatility = selected_stock.get('volatility', 20)
-                    
-                    # RSI Analysis
-                    st.markdown("**📈 RSI (14-day):**")
-                    rsi_color = "🟢" if 30 <= rsi <= 70 else "🔴" if rsi > 70 else "🟡"
-                    rsi_signal = "Overbought" if rsi > 70 else "Oversold" if rsi < 30 else "Neutral"
-                    st.write(f"{rsi_color} **{rsi:.1f}** - {rsi_signal}")
-                    
-                    # MACD Analysis
-                    st.markdown("**📊 MACD Signal:**")
-                    macd_color = "🟢" if macd_signal == 'Bullish' else "🔴"
-                    st.write(f"{macd_color} **{macd_signal}** momentum")
-                    
-                    # Moving Averages
-                    st.markdown("**📈 Moving Averages:**")
-                    sma_20 = selected_stock.get('sma_20', price)
-                    sma_50 = selected_stock.get('sma_50', price)
-                    ma20_pos = "Above" if price > sma_20 else "Below"
-                    ma50_pos = "Above" if price > sma_50 else "Below"
-                    ma20_color = "🟢" if ma20_pos == "Above" else "🔴"
-                    ma50_color = "🟢" if ma50_pos == "Above" else "🔴"
-                    st.write(f"{ma20_color} **MA(20)**: {ma20_pos} ({currency_symbol}{sma_20:.2f})")
-                    st.write(f"{ma50_color} **MA(50)**: {ma50_pos} ({currency_symbol}{sma_50:.2f})")
-                    
-                    # Volume Analysis
-                    st.markdown("**📊 Volume Analysis:**")
-                    vol_color = "🟢" if volume_trend == 'High' else "🟡" if volume_trend == 'Normal' else "🔴"
-                    st.write(f"{vol_color} **Volume**: {volume_trend}")
-                    
-                    if analysis_depth in ["Comprehensive", "Expert"]:
-                        # Additional indicators for comprehensive analysis
-                        st.markdown("**🔄 Additional Signals:**")
-                        
-                        # Stochastic
-                        stoch_signal = "Overbought" if stochastic > 80 else "Oversold" if stochastic < 20 else "Neutral"
-                        st.write(f"• **Stochastic**: {stochastic:.1f} ({stoch_signal})")
-                        
-                        # Trend strength
-                        trend_color = "🟢" if "Up" in trend_strength else "🔴" if "Down" in trend_strength else "🟡"
-                        st.write(f"• **Trend**: {trend_color} {trend_strength}")
-                        
-                        # Momentum
-                        momentum_color = "🟢" if momentum > 0 else "🔴"
-                        st.write(f"• **Momentum**: {momentum_color} {momentum:+.1f}%")
-                        
-                        # Volatility
-                        vol_level = "High" if volatility > 30 else "Low" if volatility < 15 else "Normal"
-                        st.write(f"• **Volatility**: {volatility:.1f}% ({vol_level})")
+                st.markdown("---")  # Separator between sections
                 
-                    if analysis_depth == "Expert":
-                        # Expert level indicators
-                        st.markdown("**🎯 Expert Indicators:**")
-                        
-                        # Bollinger Band position
-                        if bollinger:
-                            bb_position = ((price - bollinger.get('lower', price)) / 
-                                         (bollinger.get('upper', price) - bollinger.get('lower', price))) * 100
-                            bb_signal = "Upper" if bb_position > 75 else "Lower" if bb_position < 25 else "Middle"
-                            st.write(f"• **BB Position**: {bb_position:.0f}% ({bb_signal})")
-                        
-                        # Volume ratio
-                        volume_ratio = selected_stock.get('volume_ratio', 1.0)
-                        st.write(f"• **Volume Ratio**: {volume_ratio:.1f}x average")
-                        
-                        # Risk metrics
-                        st.write(f"• **Risk Level**: {'High' if volatility > 25 else 'Medium' if volatility > 15 else 'Low'}")
+                # Section 2: Technical Indicators
+                st.markdown("### 📊 **Technical Indicators**")
                 
-                # Column 3: Trade Setup & Risk Management
-                with analysis_col3:
-                    st.markdown("### 🎯 **Trade Setup & Risk Management**")
-                    
-                    # Entry price and timing
-                    entry_price = price
-                    target_price = nearest_resistance
-                    stop_loss = nearest_support
-                    
-                    # Risk/Reward calculation
-                    potential_gain = target_price - entry_price
-                    potential_loss = entry_price - stop_loss
-                    risk_reward = potential_gain / potential_loss if potential_loss > 0 else 0
-                    
-                    st.markdown("**🎯 Entry Strategy:**")
-                    st.write(f"• **Entry Price**: {currency_symbol}{entry_price:.2f}")
-                    st.write(f"• **Entry Type**: {entry_type}")
-                    st.write(f"• **Best Time**: Market open or breakout")
-                    
-                    st.markdown("**🎯 Targets & Stops:**")
-                    gain_pct = (potential_gain / entry_price) * 100
-                    loss_pct = (potential_loss / entry_price) * 100
-                    
-                    st.write(f"• **Target 1**: {currency_symbol}{target_price:.2f} (+{gain_pct:.1f}%)")
-                    if len(resistance_levels) > 1:
-                        target2 = sorted(resistance_levels)[1] if len(resistance_levels) > 1 else target_price * 1.05
-                        gain2_pct = ((target2 - entry_price) / entry_price) * 100
-                        st.write(f"• **Target 2**: {currency_symbol}{target2:.2f} (+{gain2_pct:.1f}%)")
-                    
-                    st.write(f"• **Stop Loss**: {currency_symbol}{stop_loss:.2f} (-{loss_pct:.1f}%)")
-                    
-                    # Position sizing suggestion
-                    st.markdown("**💰 Position Sizing:**")
-                    risk_per_trade = 2  # 2% risk per trade
-                    account_size = 10000  # Base calculation
-                    max_loss = account_size * (risk_per_trade / 100)
-                    shares = int(max_loss / potential_loss) if potential_loss > 0 else 10
-                    
-                    st.write(f"• **Suggested Size**: {shares} shares")
-                    st.write(f"• **Investment**: {currency_symbol}{shares * entry_price:,.0f}")
-                    st.write(f"• **Max Risk**: {currency_symbol}{max_loss:.0f} ({risk_per_trade}%)")
-                    
-                    # Enhanced Profit/Loss Calculations
-                    st.markdown("---")
-                    st.markdown("**💰 Profit/Loss Projections:**")
-                    
-                    # Target 1 P&L
-                    target1_profit = shares * (target_price - entry_price)
-                    target1_profit_pct = ((target_price - entry_price) / entry_price) * 100
-                    
-                    # Target 2 P&L (if exists)
-                    if len(resistance_levels) > 1:
-                        target2 = sorted(resistance_levels)[1] if len(resistance_levels) > 1 else target_price * 1.05
-                        target2_profit = shares * (target2 - entry_price)
-                        target2_profit_pct = ((target2 - entry_price) / entry_price) * 100
-                    
-                    # Stop Loss P&L
-                    stop_loss_amount = shares * (stop_loss - entry_price)
-                    stop_loss_pct = ((stop_loss - entry_price) / entry_price) * 100
-                    
-                    # Display projections
-                    st.markdown("**🎯 If Target 1 Hit:**")
-                    profit_color = "🟢" if target1_profit > 0 else "🔴"
-                    st.write(f"{profit_color} **Profit**: {currency_symbol}{target1_profit:,.0f} (+{target1_profit_pct:.1f}%)")
-                    st.write(f"📈 **Total Value**: {currency_symbol}{(shares * entry_price) + target1_profit:,.0f}")
-                    
-                    if len(resistance_levels) > 1:
-                        st.markdown("**🎯 If Target 2 Hit:**")
-                        profit2_color = "🟢" if target2_profit > 0 else "🔴"
-                        st.write(f"{profit2_color} **Profit**: {currency_symbol}{target2_profit:,.0f} (+{target2_profit_pct:.1f}%)")
-                        st.write(f"📈 **Total Value**: {currency_symbol}{(shares * entry_price) + target2_profit:,.0f}")
-                    
-                    st.markdown("**🛑 If Stop Loss Hit:**")
-                    loss_color = "🔴"
-                    st.write(f"{loss_color} **Loss**: {currency_symbol}{stop_loss_amount:,.0f} ({stop_loss_pct:.1f}%)")
-                    st.write(f"📉 **Total Value**: {currency_symbol}{(shares * entry_price) + stop_loss_amount:,.0f}")
-                    
-                    # Summary box
-                    st.markdown("---")
-                    st.markdown("**📊 Risk/Reward Summary:**")
-                    best_case = target2_profit if len(resistance_levels) > 1 else target1_profit
-                    worst_case = abs(stop_loss_amount)
-                    actual_risk_reward = best_case / worst_case if worst_case > 0 else 0
-                    
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.metric("🟢 Best Case", f"{currency_symbol}{best_case:,.0f}")
-                    with col2:
-                        st.metric("🔴 Worst Case", f"-{currency_symbol}{worst_case:,.0f}")
-                    
-                    rr_display_color = "🟢" if actual_risk_reward >= 2 else "🟡" if actual_risk_reward >= 1.5 else "🔴"
-                    st.write(f"{rr_display_color} **Actual R/R Ratio**: {actual_risk_reward:.1f}:1")
+                # Get technical data from enhanced analysis
+                rsi = selected_stock.get('rsi', 45 + (score - 50) * 0.6)
+                macd_signal = selected_stock.get('macd_signal_trend', 'Bullish' if score > 60 else 'Bearish')
+                volume_trend = selected_stock.get('volume_trend', 'High' if score > 70 else 'Normal')
+                bollinger = selected_stock.get('bollinger_bands', {})
+                stochastic = selected_stock.get('stochastic', 50)
+                trend_strength = selected_stock.get('trend_strength', 'Neutral')
+                momentum = selected_stock.get('momentum', 0)
+                volatility = selected_stock.get('volatility', 20)
                 
-                # Detailed Justification Section
-                st.markdown("---")
-                st.markdown("### 📝 **Analysis Justification**")
+                # Current position relative to levels
+                support_levels = selected_stock.get('support_levels', [price * 0.95, price * 0.90])
+                resistance_levels = selected_stock.get('resistance_levels', [price * 1.05, price * 1.10])
+                nearest_support = max([level for level in support_levels if level <= price], default=price * 0.95)
+                nearest_resistance = min([level for level in resistance_levels if level >= price], default=price * 1.05)
                 
-                # Price chart visualization (text-based)
-                with st.expander("📈 **Price Chart & Levels**", expanded=False):
+                support_distance = ((price - nearest_support) / price) * 100
+                resistance_distance = ((nearest_resistance - price) / price) * 100
+                
+                # Support levels
+                st.markdown("**🟢 Support Levels:**")
+                for i, level in enumerate(sorted(support_levels, reverse=True)[:3]):
+                    distance = ((price - level) / price) * 100
+                    strength = "Strong" if i == 0 else "Medium" if i == 1 else "Weak"
+                    st.write(f"• **{strength}**: {currency_symbol}{level:.2f} ({distance:+.1f}%)")
+                
+                # Resistance levels  
+                st.markdown("**🔴 Resistance Levels:**")
+                for i, level in enumerate(sorted(resistance_levels)[:3]):
+                    distance = ((level - price) / price) * 100
+                    strength = "Strong" if i == 0 else "Medium" if i == 1 else "Weak"
+                    st.write(f"• **{strength}**: {currency_symbol}{level:.2f} (+{distance:.1f}%)")
+                
+                # Position analysis
+                st.markdown("**📍 Current Position:**")
+                if support_distance <= 3:
+                    st.success(f"✅ Near Support ({support_distance:.1f}% above)")
+                elif resistance_distance <= 3:
+                    st.warning(f"⚠️ Near Resistance ({resistance_distance:.1f}% below)")
+                else:
+                    st.info("🎯 In middle range - good for swing entry")
+                
+                st.markdown("---")  # Separator between sections
+                
+                # RSI Analysis
+                st.markdown("**📈 RSI (14-day):**")
+                rsi_color = "🟢" if 30 <= rsi <= 70 else "🔴" if rsi > 70 else "🟡"
+                rsi_signal = "Overbought" if rsi > 70 else "Oversold" if rsi < 30 else "Neutral"
+                st.write(f"{rsi_color} **{rsi:.1f}** - {rsi_signal}")
+                
+                # MACD Analysis
+                st.markdown("**📊 MACD Signal:**")
+                macd_color = "🟢" if macd_signal == 'Bullish' else "🔴"
+                st.write(f"{macd_color} **{macd_signal}** momentum")
+                
+                # Moving Averages
+                st.markdown("**📈 Moving Averages:**")
+                sma_20 = selected_stock.get('sma_20', price)
+                sma_50 = selected_stock.get('sma_50', price)
+                ma20_pos = "Above" if price > sma_20 else "Below"
+                ma50_pos = "Above" if price > sma_50 else "Below"
+                ma20_color = "🟢" if ma20_pos == "Above" else "🔴"
+                ma50_color = "🟢" if ma50_pos == "Above" else "🔴"
+                st.write(f"{ma20_color} **MA(20)**: {ma20_pos} ({currency_symbol}{sma_20:.2f})")
+                st.write(f"{ma50_color} **MA(50)**: {ma50_pos} ({currency_symbol}{sma_50:.2f})")
+                
+                # Volume Analysis
+                st.markdown("**📊 Volume Analysis:**")
+                vol_color = "🟢" if volume_trend == 'High' else "🟡" if volume_trend == 'Normal' else "🔴"
+                st.write(f"{vol_color} **Volume**: {volume_trend}")
+                
+                if analysis_depth in ["Comprehensive", "Expert"]:
+                    # Additional indicators for comprehensive analysis
+                    st.markdown("**🔄 Additional Signals:**")
+                    
+                    # Stochastic
+                    stoch_signal = "Overbought" if stochastic > 80 else "Oversold" if stochastic < 20 else "Neutral"
+                    st.write(f"• **Stochastic**: {stochastic:.1f} ({stoch_signal})")
+                    
+                    # Trend strength
+                    trend_color = "🟢" if "Up" in trend_strength else "🔴" if "Down" in trend_strength else "🟡"
+                    st.write(f"• **Trend**: {trend_color} {trend_strength}")
+                    
+                    # Momentum
+                    momentum_color = "🟢" if momentum > 0 else "🔴"
+                    st.write(f"• **Momentum**: {momentum_color} {momentum:+.1f}%")
+                    
+                    # Volatility
+                    vol_level = "High" if volatility > 30 else "Low" if volatility < 15 else "Normal"
+                    st.write(f"• **Volatility**: {volatility:.1f}% ({vol_level})")
+            
+                if analysis_depth == "Expert":
+                    # Expert level indicators
+                    st.markdown("**🎯 Expert Indicators:**")
+                    
+                    # Bollinger Band position
+                    if bollinger:
+                        bb_position = ((price - bollinger.get('lower', price)) / 
+                                     (bollinger.get('upper', price) - bollinger.get('lower', price))) * 100
+                        bb_signal = "Upper" if bb_position > 75 else "Lower" if bb_position < 25 else "Middle"
+                        st.write(f"• **BB Position**: {bb_position:.0f}% ({bb_signal})")
+                    
+                    # Volume ratio
+                    volume_ratio = selected_stock.get('volume_ratio', 1.0)
+                    st.write(f"• **Volume Ratio**: {volume_ratio:.1f}x average")
+                    
+                    # Risk metrics
+                    st.write(f"• **Risk Level**: {'High' if volatility > 25 else 'Medium' if volatility > 15 else 'Low'}")
+                
+                st.markdown("---")  # Separator between sections
+            
+            # Section 3: Trade Setup & Risk Management
+            st.markdown("### 🎯 **Trade Setup & Risk Management**")
+            
+            # Entry price and timing
+            entry_price = price
+            target_price = nearest_resistance
+            stop_loss = nearest_support
+            
+            # Risk/Reward calculation
+            potential_gain = target_price - entry_price
+            potential_loss = entry_price - stop_loss
+            risk_reward = potential_gain / potential_loss if potential_loss > 0 else 0
+            
+            st.markdown("**🎯 Entry Strategy:**")
+            st.write(f"• **Entry Price**: {currency_symbol}{entry_price:.2f}")
+            st.write(f"• **Entry Type**: {entry_type}")
+            st.write(f"• **Best Time**: Market open or breakout")
+            
+            st.markdown("**🎯 Targets & Stops:**")
+            gain_pct = (potential_gain / entry_price) * 100
+            loss_pct = (potential_loss / entry_price) * 100
+            
+            st.write(f"• **Target 1**: {currency_symbol}{target_price:.2f} (+{gain_pct:.1f}%)")
+            if len(resistance_levels) > 1:
+                target2 = sorted(resistance_levels)[1] if len(resistance_levels) > 1 else target_price * 1.05
+                gain2_pct = ((target2 - entry_price) / entry_price) * 100
+                st.write(f"• **Target 2**: {currency_symbol}{target2:.2f} (+{gain2_pct:.1f}%)")
+            
+            st.write(f"• **Stop Loss**: {currency_symbol}{stop_loss:.2f} (-{loss_pct:.1f}%)")
+            
+            # Position sizing suggestion
+            st.markdown("**💰 Position Sizing:**")
+            risk_per_trade = 2  # 2% risk per trade
+            account_size = 10000  # Base calculation
+            max_loss = account_size * (risk_per_trade / 100)
+            shares = int(max_loss / potential_loss) if potential_loss > 0 else 10
+            
+            st.write(f"• **Suggested Size**: {shares} shares")
+            st.write(f"• **Investment**: {currency_symbol}{shares * entry_price:,.0f}")
+            st.write(f"• **Max Risk**: {currency_symbol}{max_loss:.0f} ({risk_per_trade}%)")
+            
+            # Enhanced Profit/Loss Calculations
+            st.markdown("---")
+            st.markdown("**💰 Profit/Loss Projections:**")
+            
+            # Target 1 P&L
+            target1_profit = shares * (target_price - entry_price)
+            target1_profit_pct = ((target_price - entry_price) / entry_price) * 100
+            
+            # Target 2 P&L (if exists)
+            if len(resistance_levels) > 1:
+                target2 = sorted(resistance_levels)[1] if len(resistance_levels) > 1 else target_price * 1.05
+                target2_profit = shares * (target2 - entry_price)
+                target2_profit_pct = ((target2 - entry_price) / entry_price) * 100
+            
+            # Stop Loss P&L
+            stop_loss_amount = shares * (stop_loss - entry_price)
+            stop_loss_pct = ((stop_loss - entry_price) / entry_price) * 100
+            
+            # Display projections
+            st.markdown("**🎯 If Target 1 Hit:**")
+            profit_color = "🟢" if target1_profit > 0 else "🔴"
+            st.write(f"{profit_color} **Profit**: {currency_symbol}{target1_profit:,.0f} (+{target1_profit_pct:.1f}%)")
+            st.write(f"📈 **Total Value**: {currency_symbol}{(shares * entry_price) + target1_profit:,.0f}")
+            
+            if len(resistance_levels) > 1:
+                st.markdown("**🎯 If Target 2 Hit:**")
+                profit2_color = "🟢" if target2_profit > 0 else "🔴"
+                st.write(f"{profit2_color} **Profit**: {currency_symbol}{target2_profit:,.0f} (+{target2_profit_pct:.1f}%)")
+                st.write(f"📈 **Total Value**: {currency_symbol}{(shares * entry_price) + target2_profit:,.0f}")
+            
+            st.markdown("**🛑 If Stop Loss Hit:**")
+            loss_color = "🔴"
+            st.write(f"{loss_color} **Loss**: {currency_symbol}{stop_loss_amount:,.0f} ({stop_loss_pct:.1f}%)")
+            st.write(f"📉 **Total Value**: {currency_symbol}{(shares * entry_price) + stop_loss_amount:,.0f}")
+            
+            # Summary box
+            st.markdown("---")
+            st.markdown("**📊 Risk/Reward Summary:**")
+            best_case = target2_profit if len(resistance_levels) > 1 else target1_profit
+            worst_case = abs(stop_loss_amount)
+            actual_risk_reward = best_case / worst_case if worst_case > 0 else 0
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("🟢 Best Case", f"{currency_symbol}{best_case:,.0f}")
+            with col2:
+                st.metric("🔴 Worst Case", f"-{currency_symbol}{worst_case:,.0f}")
+            
+            rr_display_color = "🟢" if actual_risk_reward >= 2 else "🟡" if actual_risk_reward >= 1.5 else "🔴"
+            st.write(f"{rr_display_color} **Actual R/R Ratio**: {actual_risk_reward:.1f}:1")
+            
+            # Detailed Justification Section
+            st.markdown("---")
+            st.markdown("### 📝 **Analysis Justification**")
+            
+            # Price chart visualization (text-based)
+            with st.expander("📈 **Price Chart & Levels**", expanded=False):
                     # Create a simple text-based chart showing price relative to support/resistance
                     support_levels = selected_stock.get('support_levels', [nearest_support])
                     resistance_levels = selected_stock.get('resistance_levels', [nearest_resistance])
@@ -1323,65 +1318,65 @@ def show_live_signals(dashboard, selected_market):
                             st.success(f"✅ Price at {bb_position:.0f}% of Bollinger Band range (oversold)")
                         else:
                             st.info(f"📊 Price at {bb_position:.0f}% of Bollinger Band range (normal)")
-                
-                # Create justification based on the signals and analysis
-                justification_points = []
-                
-                # Technical strength points
-                if score >= 80:
-                    justification_points.append("🟢 **Very Strong Setup**: Multiple technical indicators align for high-probability trade")
-                elif score >= 60:
-                    justification_points.append("🟡 **Good Setup**: Several positive technical signals present")
-                else:
-                    justification_points.append("🔴 **Caution**: Mixed signals, consider smaller position size")
-                
-                # Support/Resistance justification
-                if entry_type == "Support Bounce":
-                    justification_points.append(f"🎯 **Support Bounce Play**: Price testing strong support at {currency_symbol}{nearest_support:.2f}")
-                elif entry_type == "Resistance Break":
-                    justification_points.append(f"🚀 **Breakout Play**: Price breaking above resistance at {currency_symbol}{nearest_resistance:.2f}")
-                elif entry_type == "Pullback Entry":
-                    justification_points.append("📈 **Pullback Entry**: Healthy correction in uptrend offers good entry")
-                
-                # Risk management justification
-                if risk_reward >= 2:
-                    justification_points.append(f"✅ **Excellent Risk/Reward**: {risk_reward:.1f}:1 ratio exceeds minimum 2:1 requirement")
-                elif risk_reward >= 1.5:
-                    justification_points.append(f"✅ **Good Risk/Reward**: {risk_reward:.1f}:1 ratio meets trading criteria")
-                else:
-                    justification_points.append(f"⚠️ **Marginal Risk/Reward**: {risk_reward:.1f}:1 ratio below optimal, consider smaller size")
-                
-                # Market context
-                justification_points.append(f"🌍 **Market Context**: {market_name} market conditions favor this setup type")
-                
-                # Volume and momentum
-                if volume_trend == "High":
-                    justification_points.append("📊 **Volume Confirmation**: High volume supports the price movement")
-                
-                # Technical indicator alignment
-                if rsi_signal == "Neutral":
-                    justification_points.append("📈 **RSI Favorable**: RSI in healthy range, room for movement")
-                
-                # Display justification points
-                for point in justification_points:
-                    st.markdown(f"• {point}")
-                
-                # Risk warnings
-                st.markdown("**⚠️ Risk Considerations:**")
-                risk_warnings = []
-                
-                if rsi > 70:
-                    risk_warnings.append("RSI overbought - watch for potential reversal")
-                if resistance_distance <= 2:
-                    risk_warnings.append("Very close to resistance - limited upside")
-                if volume_trend == "Low":
-                    risk_warnings.append("Low volume - lack of conviction in move")
-                
-                if risk_warnings:
-                    for warning in risk_warnings:
-                        st.markdown(f"• 🔴 {warning}")
-                else:
-                    st.markdown("• ✅ No major risk flags identified")
+            
+            # Create justification based on the signals and analysis
+            justification_points = []
+            
+            # Technical strength points
+            if score >= 80:
+                justification_points.append("🟢 **Very Strong Setup**: Multiple technical indicators align for high-probability trade")
+            elif score >= 60:
+                justification_points.append("🟡 **Good Setup**: Several positive technical signals present")
+            else:
+                justification_points.append("🔴 **Caution**: Mixed signals, consider smaller position size")
+            
+            # Support/Resistance justification
+            if entry_type == "Support Bounce":
+                justification_points.append(f"🎯 **Support Bounce Play**: Price testing strong support at {currency_symbol}{nearest_support:.2f}")
+            elif entry_type == "Resistance Break":
+                justification_points.append(f"🚀 **Breakout Play**: Price breaking above resistance at {currency_symbol}{nearest_resistance:.2f}")
+            elif entry_type == "Pullback Entry":
+                justification_points.append("📈 **Pullback Entry**: Healthy correction in uptrend offers good entry")
+            
+            # Risk management justification
+            if risk_reward >= 2:
+                justification_points.append(f"✅ **Excellent Risk/Reward**: {risk_reward:.1f}:1 ratio exceeds minimum 2:1 requirement")
+            elif risk_reward >= 1.5:
+                justification_points.append(f"✅ **Good Risk/Reward**: {risk_reward:.1f}:1 ratio meets trading criteria")
+            else:
+                justification_points.append(f"⚠️ **Marginal Risk/Reward**: {risk_reward:.1f}:1 ratio below optimal, consider smaller size")
+            
+            # Market context
+            justification_points.append(f"🌍 **Market Context**: {market_name} market conditions favor this setup type")
+            
+            # Volume and momentum
+            if volume_trend == "High":
+                justification_points.append("📊 **Volume Confirmation**: High volume supports the price movement")
+            
+            # Technical indicator alignment
+            if rsi_signal == "Neutral":
+                justification_points.append("📈 **RSI Favorable**: RSI in healthy range, room for movement")
+            
+            # Display justification points
+            for point in justification_points:
+                st.markdown(f"• {point}")
+            
+            # Risk warnings
+            st.markdown("**⚠️ Risk Considerations:**")
+            risk_warnings = []
+            
+            if rsi > 70:
+                risk_warnings.append("RSI overbought - watch for potential reversal")
+            if resistance_distance <= 2:
+                risk_warnings.append("Very close to resistance - limited upside")
+            if volume_trend == "Low":
+                risk_warnings.append("Low volume - lack of conviction in move")
+            
+            if risk_warnings:
+                for warning in risk_warnings:
+                    st.markdown(f"• 🔴 {warning}")
+            else:
+                st.markdown("• ✅ No major risk flags identified")
                 
                 # Trading plan summary
                 st.markdown("---")
@@ -1766,55 +1761,6 @@ def show_portfolio(dashboard):
         show_currency_overview()
     
     st.markdown("---")
-    
-    
-    # Current positions
-    if positions:
-        st.metric(
-            "💰 Portfolio Value",
-            f"₹{inr_data['current_value']:,.2f}",
-            f"₹{inr_data['total_return']:,.2f}"
-        )
-        st.metric(
-            "📈 Return",
-            f"{inr_data['total_return_pct']:.2f}%",
-            delta=f"{inr_data['total_return_pct']:.2f}%"
-        )
-        st.metric("💵 Cash", f"₹{inr_data['cash']:,.2f}")
-        st.metric("📊 Positions", inr_data['positions_count'])
-    
-    with col3:
-        myr_data = currency_metrics['MYR']
-        st.markdown("### 🇲🇾 MYR Portfolio")
-        st.metric(
-            "💰 Portfolio Value",
-            f"RM{myr_data['current_value']:,.2f}",
-            f"RM{myr_data['total_return']:,.2f}"
-        )
-        st.metric(
-            "📈 Return",
-            f"{myr_data['total_return_pct']:.2f}%",
-            delta=f"{myr_data['total_return_pct']:.2f}%"
-        )
-        st.metric("💵 Cash", f"RM{myr_data['cash']:,.2f}")
-        st.metric("📊 Positions", myr_data['positions_count'])
-    
-    st.markdown("---")
-    
-    # Overall summary
-    total_positions = sum(data['positions_count'] for data in currency_metrics.values())
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("🌍 Total Positions", total_positions)
-    with col2:
-        st.info("� **No Currency Conversion** - Each market tracked separately for clearer performance insights!")
-    with col3:
-        # Best performing currency
-        best_currency = max(currency_metrics.keys(), key=lambda k: currency_metrics[k]['total_return_pct'])
-        best_return = currency_metrics[best_currency]['total_return_pct']
-        currency_flag = '🇺🇸' if best_currency == 'USD' else '🇮🇳' if best_currency == 'INR' else '🇲🇾'
-        st.metric("🏆 Best Performer", f"{currency_flag} {best_currency}", f"{best_return:.2f}%")
     
     # Current positions
     if positions:
