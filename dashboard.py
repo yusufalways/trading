@@ -18,10 +18,17 @@ import os
 # Add project root to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from config.watchlist import DEFAULT_WATCHLIST, TRADING_CONFIG
+# Trading configuration
+TRADING_CONFIG = {
+    'initial_capital': 10000,
+    'max_positions': 8,
+    'risk_per_trade': 0.02,  # 2% risk per trade
+    'stop_loss_pct': 0.05,   # 5% stop loss
+}
+
 from tools.portfolio_manager import PaperTradingPortfolio
 from tools.technical_analysis import TechnicalAnalyzer
-from tools.enhanced_signals import get_daily_swing_signals
+from tools.enhanced_signals import get_daily_swing_signals, get_market_watchlists
 
 # Page configuration
 st.set_page_config(
@@ -232,13 +239,16 @@ def get_market_signals(market_filter):
     dashboard = TradingDashboard()
     
     if market_filter == "All Markets":
-        markets = DEFAULT_WATCHLIST
+        markets = get_market_watchlists()
     elif market_filter == "🇺🇸 USA":
-        markets = {"usa": DEFAULT_WATCHLIST["usa"]}
+        watchlists = get_market_watchlists()
+        markets = {"usa": watchlists["usa"]}
     elif market_filter == "🇮🇳 India":
-        markets = {"india": DEFAULT_WATCHLIST["india"]}
+        watchlists = get_market_watchlists()
+        markets = {"india": watchlists["india"]}
     elif market_filter == "🇲🇾 Malaysia":
-        markets = {"malaysia": DEFAULT_WATCHLIST["malaysia"]}
+        watchlists = get_market_watchlists()
+        markets = {"malaysia": watchlists["malaysia"]}
 
     all_signals = []
     processed_symbols = set()  # Track processed symbols to avoid duplicates
@@ -1791,7 +1801,8 @@ def show_charts(dashboard):
     
     # Stock selector
     all_symbols = []
-    for symbols in DEFAULT_WATCHLIST.values():
+    watchlists = get_market_watchlists()
+    for symbols in watchlists.values():
         all_symbols.extend(symbols[:5])  # Limit for performance
     
     selected_symbol = st.selectbox("Select Stock for Analysis", all_symbols)
