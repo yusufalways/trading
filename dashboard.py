@@ -637,6 +637,9 @@ def show_live_signals(dashboard, selected_market):
                 if st.session_state.swing_data and dashboard.portfolio:
                     st.session_state.swing_data['portfolio_analysis'] = get_portfolio_analysis(dashboard.portfolio)
                 
+                # Store scan results for charts tab
+                st.session_state.scan_results = st.session_state.swing_data
+                
                 st.session_state.last_scan_time = datetime.now()
             
             progress_bar.progress(1.0)
@@ -659,6 +662,9 @@ def show_live_signals(dashboard, selected_market):
                 # Get fresh portfolio analysis (not cached)
                 if st.session_state.swing_data and dashboard.portfolio:
                     st.session_state.swing_data['portfolio_analysis'] = get_portfolio_analysis(dashboard.portfolio)
+                
+                # Store scan results for charts tab
+                st.session_state.scan_results = st.session_state.swing_data
                 
                 st.session_state.last_scan_time = datetime.now()
                 st.session_state.last_scan_type = "Quick Scan"
@@ -2441,18 +2447,77 @@ def show_performance(dashboard):
         st.dataframe(display_trades, use_container_width=True)
 
 def show_charts(dashboard):
-    """Display detailed charts"""
+    """Display detailed charts for scanned opportunities"""
     st.header("📈 Technical Analysis Charts")
     
-    # Stock selector
-    all_symbols = []
-    watchlists = get_market_watchlists()
-    for symbols in watchlists.values():
-        all_symbols.extend(symbols[:5])  # Limit for performance
+    # Get scan results from session
+    scan_results = st.session_state.get('scan_results', {})
     
-    selected_symbol = st.selectbox("Select Stock for Analysis", all_symbols)
+    # Collect all opportunities from scan results
+    all_scanned_stocks = []
+    if scan_results and 'markets' in scan_results:
+        for market_name, market_data in scan_results['markets'].items():
+            opportunities = market_data.get('opportunities', [])
+            for opp in opportunities:
+                all_scanned_stocks.append({
+                    'symbol': opp['symbol'],
+                    'market_name': opp.get('market_name', market_name),
+                    'score': opp['swing_score'],
+                    'recommendation': opp['recommendation'],
+                    'price': opp['current_price']
+                })
     
-    if selected_symbol:
+    if not all_scanned_stocks:
+        st.warning("📊 No scan results available. Please run a scan first from the Live Signals tab.")
+        st.info("💡 The Performance tab shows charts for stocks found during your latest scan.")
+        return
+    
+    # Sort by score for better organization
+    all_scanned_stocks.sort(key=lambda x: x['score'], reverse=True)
+    
+    # Create stock options with more detail
+    stock_options = []
+    for stock in all_scanned_stocks:
+        currency = "₹" if '.NS' in stock['symbol'] else "RM" if '.KL' in stock['symbol'] else "$"
+        option_text = f"{stock['symbol']} ({stock['market_name']}) - Score: {stock['score']}/100 - {currency}{stock['price']:.2f}"
+        stock_options.append(option_text)
+    
+    # Display scan summary
+    st.subheader("🎯 Scan Results Summary")
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric("📊 Total Opportunities", len(all_scanned_stocks))
+        strong_buys = len([s for s in all_scanned_stocks if s['score'] >= 75])
+        st.metric("🟢 Strong Buy Signals", strong_buys)
+    
+    with col2:
+        buys = len([s for s in all_scanned_stocks if 65 <= s['score'] < 75])
+        st.metric("🟡 Buy Signals", buys)
+        avg_score = sum(s['score'] for s in all_scanned_stocks) / len(all_scanned_stocks)
+        st.metric("📈 Average Score", f"{avg_score:.1f}/100")
+    
+    with col3:
+        markets = len(set(s['market_name'] for s in all_scanned_stocks))
+        st.metric("🌍 Markets Scanned", markets)
+        if scan_results.get('total_stocks_scanned'):
+            st.metric("⚡ Scan Speed", f"{scan_results['total_stocks_scanned']} stocks")
+    
+    # Stock selector with scanned results
+    st.subheader("📊 Select Stock for Technical Analysis")
+    selected_option = st.selectbox(
+        "Choose from scanned opportunities (sorted by score):",
+        stock_options,
+        help="These are the actual stocks found during your latest scan"
+    )
+    
+    if selected_option:
+        # Extract symbol from selected option
+        selected_symbol = selected_option.split(' (')[0]
+        selected_stock_data = next(s for s in all_scanned_stocks if s['symbol'] == selected_symbol)
+        
+        st.info(f"📈 Analyzing **{selected_symbol}** - Scanner Score: **{selected_stock_data['score']}/100** ({selected_stock_data['recommendation']})")
+        
         with st.spinner(f"Loading {selected_symbol} chart..."):
             analysis = dashboard.get_stock_analysis(selected_symbol, period="1y")
         
@@ -2533,28 +2598,120 @@ def show_charts(dashboard):
             
             st.plotly_chart(fig, use_container_width=True)
             
-            # Current analysis
-            col1, col2 = st.columns(2)
+            # Enhanced analysis section with scanner comparison
+            st.subheader("🔍 Technical Analysis vs Scanner Results")
+            
+            col1, col2, col3 = st.columns(3)
             
             with col1:
-                st.subheader("📊 Current Analysis")
-                st.write(f"**Recommendation:** {signals['recommendation']}")
-                st.write(f"**Confidence:** {signals['confidence']}%")
-                st.write(f"**Current Price:** ${analysis['latest']['Close']:.2f}")
+                st.markdown("### 📊 Chart Analysis")
+                st.write(f"**Chart Recommendation:** {signals['recommendation']}")
+                st.write(f"**Chart Confidence:** {signals['confidence']}%")
+                currency = "₹" if '.NS' in selected_symbol else "RM" if '.KL' in selected_symbol else "$"
+                st.write(f"**Current Price:** {currency}{analysis['latest']['Close']:.2f}")
                 st.write(f"**RSI:** {signals['rsi']:.1f}")
             
             with col2:
-                st.subheader("🎯 Signal Details")
-                st.write(f"**Trend (SMA):** {'Bullish' if signals['sma_bullish'] else 'Bearish'}")
-                st.write(f"**MACD:** {'Bullish' if signals['macd_bullish'] else 'Bearish'}")
+                st.markdown("### ⚡ Scanner Results")
+                st.write(f"**Scanner Score:** {selected_stock_data['score']}/100")
+                st.write(f"**Scanner Recommendation:** {selected_stock_data['recommendation']}")
+                st.write(f"**Market:** {selected_stock_data['market_name']}")
+                
+                # Score interpretation
+                if selected_stock_data['score'] >= 75:
+                    st.success("🟢 Strong Buy Signal")
+                elif selected_stock_data['score'] >= 65:
+                    st.info("🟡 Buy Signal") 
+                else:
+                    st.warning("⚠️ Weak Signal")
+            
+            with col3:
+                st.markdown("### 🎯 Technical Signals")
+                st.write(f"**Trend (SMA):** {'🟢 Bullish' if signals['sma_bullish'] else '🔴 Bearish'}")
+                st.write(f"**MACD:** {'🟢 Bullish' if signals['macd_bullish'] else '🔴 Bearish'}")
                 st.write(f"**BB Position:** {signals['bb_position']}")
                 
-                if signals['recommendation'] in ['BUY', 'STRONG BUY']:
-                    st.success("🟢 This stock shows buying opportunity!")
-                elif signals['recommendation'] in ['SELL', 'STRONG SELL']:
-                    st.error("🔴 This stock shows selling signals!")
+                # RSI interpretation
+                rsi = signals['rsi']
+                if rsi > 70:
+                    st.write("**RSI Status:** 🔴 Overbought")
+                elif rsi < 30:
+                    st.write("**RSI Status:** 🟢 Oversold")
                 else:
-                    st.info("🟡 This stock is in a neutral zone.")
+                    st.write("**RSI Status:** 🟡 Neutral")
+            
+            # Analysis consistency check
+            st.markdown("---")
+            st.subheader("🔄 Analysis Consistency")
+            
+            # Compare scanner vs chart recommendations
+            scanner_bullish = selected_stock_data['score'] >= 65
+            chart_bullish = signals['recommendation'] in ['BUY', 'STRONG BUY']
+            
+            if scanner_bullish and chart_bullish:
+                st.success("✅ **CONSISTENT SIGNALS**: Both scanner and chart analysis show bullish signals!")
+                st.write("🎯 **Action**: This appears to be a good swing trading opportunity")
+            elif scanner_bullish and not chart_bullish:
+                st.warning("⚠️ **MIXED SIGNALS**: Scanner is bullish but chart shows bearish/neutral signals")
+                st.write("🔍 **Action**: Consider waiting for better chart confirmation")
+            elif not scanner_bullish and chart_bullish:
+                st.warning("⚠️ **MIXED SIGNALS**: Chart is bullish but scanner score is low")
+                st.write("🔍 **Action**: Scanner may have found other risk factors")
+            else:
+                st.error("🔴 **BEARISH CONSENSUS**: Both systems show weak/negative signals")
+                st.write("❌ **Action**: Avoid this trade opportunity")
+            
+            # Additional insights
+            st.markdown("**💡 Trading Insights:**")
+            insights = []
+            
+            if signals['rsi'] < 35:
+                insights.append("• RSI below 35 suggests potential oversold bounce opportunity")
+            elif signals['rsi'] > 65:
+                insights.append("• RSI above 65 suggests momentum but watch for reversal")
+                
+            if signals['sma_bullish']:
+                insights.append("• Price above moving averages indicates uptrend")
+            else:
+                insights.append("• Price below moving averages indicates downtrend")
+                
+            if selected_stock_data['score'] >= 80:
+                insights.append("• High scanner score indicates multiple positive technical factors")
+            elif selected_stock_data['score'] <= 40:
+                insights.append("• Low scanner score suggests multiple risk factors present")
+            
+            for insight in insights:
+                st.write(insight)
+        
+        else:
+            st.error(f"❌ Unable to load chart data for {selected_symbol}")
+            st.info("� This might be due to data provider issues or delisted stock")
+    
+    # Market overview for scanned stocks
+    st.markdown("---")
+    st.subheader("🌍 Market Overview from Scan")
+    
+    # Group by market
+    markets_summary = {}
+    for stock in all_scanned_stocks:
+        market = stock['market_name']
+        if market not in markets_summary:
+            markets_summary[market] = []
+        markets_summary[market].append(stock)
+    
+    market_cols = st.columns(len(markets_summary))
+    
+    for i, (market, stocks) in enumerate(markets_summary.items()):
+        with market_cols[i]:
+            st.markdown(f"### {market}")
+            avg_score = sum(s['score'] for s in stocks) / len(stocks)
+            st.metric("📊 Average Score", f"{avg_score:.1f}/100")
+            st.metric("🔢 Opportunities", len(stocks))
+            
+            # Top performer in this market
+            top_stock = max(stocks, key=lambda x: x['score'])
+            st.write(f"🏆 **Top**: {top_stock['symbol']}")
+            st.write(f"Score: {top_stock['score']}/100")
 
 def show_trade_history(dashboard):
     """Display comprehensive trade history with profit/loss tracking"""
