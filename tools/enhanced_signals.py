@@ -641,7 +641,7 @@ class EnhancedSwingAnalyzer:
         
         for symbol in symbols:
             analysis = self.calculate_swing_signals(symbol)
-            if analysis and analysis['swing_score'] >= 40:  # Minimum threshold
+            if analysis and analysis['swing_score'] >= 70:  # Enhanced threshold for quality setups
                 opportunities.append(analysis)
         
         # Sort by swing score and return top N

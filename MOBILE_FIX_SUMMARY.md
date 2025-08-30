@@ -85,5 +85,5 @@ Your Swing Trading Dashboard now provides:
 5. **Enhanced UX**: Touch-friendly mobile interface with expandable sections
 
 **Dashboard is now ready for production use on all devices! 📱💻🖥️**
-
 python3 -m streamlit run dashboard.py
+
