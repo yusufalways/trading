@@ -337,7 +337,6 @@ class TradingDashboard:
         
         return 'HOLD'
 
-@require_authentication
 def main():
     dashboard = TradingDashboard()
     
@@ -2782,10 +2781,15 @@ def app_entry_point():
     if 'authenticated' not in st.session_state:
         st.session_state.authenticated = False
     
-    # Check authentication
+    # Check authentication first
     if not check_authentication():
+        # Clear any cached content and show login
+        st.cache_data.clear()
+        st.cache_resource.clear()
         show_login_form()
+        st.stop()  # Prevent any further execution
     else:
+        # User is authenticated, show main dashboard
         main()
 
 if __name__ == "__main__":
