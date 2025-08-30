@@ -865,41 +865,43 @@ def get_daily_swing_signals(portfolio_manager=None) -> Dict:
     return results
 
 def get_ultra_fast_swing_signals(progress_callback=None, top_n: int = 15) -> Dict:
-    """ULTRA-FAST market scan using batch downloads and concurrent processing"""
-    print("⚡ ULTRA-FAST MARKET SCAN STARTING...")
-    print("🎯 Using optimized batch downloads + concurrent processing")
+    """ULTRA-FAST market scan using optimized batch downloads (Streamlit Cloud compatible)"""
     
-    import concurrent.futures
+    print("⚡ ULTRA-FAST MARKET SCAN STARTING...")
+    print("🎯 Using optimized batch downloads (Streamlit Cloud mode)")
+    
     import time
     import warnings
-    from typing import Tuple
     warnings.filterwarnings('ignore')
     
-    def batch_download_data(symbols: List[str], period: str = "1mo", batch_size: int = 30) -> Dict[str, pd.DataFrame]:
-        """Download data for multiple symbols in batches"""
+    def batch_download_data_simple(symbols: List[str], period: str = "1mo", batch_size: int = 20) -> Dict[str, pd.DataFrame]:
+        """Simplified batch download for Streamlit Cloud compatibility"""
         all_data = {}
         
-        # Split symbols into batches
+        # Split symbols into smaller batches for cloud compatibility
         for i in range(0, len(symbols), batch_size):
             batch_symbols = symbols[i:i + batch_size]
             
             try:
                 # Use batch download
                 batch_str = " ".join(batch_symbols)
-                print(f"📦 Downloading batch {i//batch_size + 1}: {len(batch_symbols)} symbols")
+                if progress_callback:
+                    progress_callback(f"Downloading batch {i//batch_size + 1} ({len(batch_symbols)} stocks)", 
+                                    i / len(symbols) * 0.3)  # First 30% for downloads
                 
                 data = yf.download(
                     batch_str, 
                     period=period, 
                     group_by='ticker',
-                    threads=True,
+                    threads=False,  # Disable threading for cloud compatibility
                     progress=False
                 )
                 
                 # Extract individual DataFrames
                 if len(batch_symbols) == 1:
                     # Single symbol case
-                    all_data[batch_symbols[0]] = data
+                    if not data.empty:
+                        all_data[batch_symbols[0]] = data
                 else:
                     # Multiple symbols case
                     for symbol in batch_symbols:
@@ -908,11 +910,11 @@ def get_ultra_fast_swing_signals(progress_callback=None, top_n: int = 15) -> Dic
                                 symbol_data = data[symbol].dropna()
                                 if not symbol_data.empty:
                                     all_data[symbol] = symbol_data
-                        except (KeyError, AttributeError):
+                        except (KeyError, AttributeError, IndexError):
                             # Symbol not found in batch
                             continue
                 
-                # Small delay between batches to avoid rate limiting
+                # Small delay between batches
                 time.sleep(0.1)
                 
             except Exception as e:
@@ -1037,39 +1039,26 @@ def get_ultra_fast_swing_signals(progress_callback=None, top_n: int = 15) -> Dic
             print(f"❌ Error analyzing {symbol}: {e}")
             return None
     
-    def concurrent_analysis(symbol_data_pairs: List[Tuple[str, pd.DataFrame]], 
-                          progress_callback=None, max_workers: int = 15) -> List[Dict]:
-        """Analyze multiple symbols concurrently"""
-        
-        def analyze_single(pair):
-            symbol, data = pair
-            return calculate_quick_score(data, symbol)
-        
+    
+    def simple_analysis(symbol_data_pairs: List[Tuple[str, pd.DataFrame]], 
+                       progress_callback=None) -> List[Dict]:
+        """Analyze multiple symbols sequentially (Streamlit Cloud compatible)"""
         results = []
         total_pairs = len(symbol_data_pairs)
         
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # Submit all tasks
-            future_to_symbol = {
-                executor.submit(analyze_single, pair): pair[0] 
-                for pair in symbol_data_pairs
-            }
-            
-            # Collect results as they complete
-            for i, future in enumerate(concurrent.futures.as_completed(future_to_symbol)):
-                symbol = future_to_symbol[future]
-                try:
-                    result = future.result()
-                    if result:
-                        results.append(result)
+        for i, (symbol, data) in enumerate(symbol_data_pairs):
+            try:
+                result = calculate_quick_score(data, symbol)
+                if result:
+                    results.append(result)
+                
+                # Update progress
+                if progress_callback and i % 5 == 0:
+                    progress = (i + 1) / total_pairs
+                    progress_callback(f"Analyzing: {symbol} ({i+1}/{total_pairs})", progress)
                     
-                    # Update progress
-                    if progress_callback and i % 5 == 0:
-                        progress = (i + 1) / total_pairs
-                        progress_callback(f"Analyzing: {symbol} ({i+1}/{total_pairs})", progress)
-                        
-                except Exception as e:
-                    print(f"❌ Analysis failed for {symbol}: {e}")
+            except Exception as e:
+                print(f"❌ Analysis failed for {symbol}: {e}")
         
         return results
     
@@ -1105,25 +1094,24 @@ def get_ultra_fast_swing_signals(progress_callback=None, top_n: int = 15) -> Dic
             progress_callback(f"Starting {market_name} scan ({len(symbols)} stocks)", overall_progress)
         
         # Step 1: Batch download all data
-        all_data = batch_download_data(symbols, period="1mo", batch_size=25)
+        all_data = batch_download_data_simple(symbols, period="1mo", batch_size=20)
         download_time = time.time() - market_start
         
         print(f"📦 Downloaded {len(all_data)}/{len(symbols)} symbols in {download_time:.1f}s")
         
-        # Step 2: Concurrent analysis
+        # Step 2: Simple analysis
         if progress_callback:
             progress_callback(f"Analyzing {market_name} symbols...", (scanned_count + 0.3 * len(symbols)) / total_stocks)
         
         symbol_data_pairs = list(all_data.items())
         analysis_start = time.time()
         
-        market_results = concurrent_analysis(
+        market_results = simple_analysis(
             symbol_data_pairs, 
             progress_callback=lambda msg, prog: progress_callback(
                 f"{market_name}: {msg}", 
                 (scanned_count + 0.3 * len(symbols) + prog * 0.7 * len(symbols)) / total_stocks
-            ) if progress_callback else None,
-            max_workers=15
+            ) if progress_callback else None
         )
         
         analysis_time = time.time() - analysis_start

@@ -31,7 +31,17 @@ TRADING_CONFIG = {
 
 from tools.portfolio_manager import PaperTradingPortfolio
 from tools.technical_analysis import TechnicalAnalyzer
-from tools.enhanced_signals import get_daily_swing_signals, get_market_watchlists, get_comprehensive_swing_signals, get_ultra_fast_swing_signals
+
+# Import basic enhanced signals
+from tools.enhanced_signals import get_daily_swing_signals, get_market_watchlists, get_comprehensive_swing_signals
+
+# Import ultra-fast scanner with fallback
+try:
+    from tools.enhanced_signals import get_ultra_fast_swing_signals
+    ULTRA_FAST_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️ Ultra-fast scanner not available: {e}")
+    ULTRA_FAST_AVAILABLE = False
 
 # Import advanced analysis modules
 try:
@@ -488,55 +498,93 @@ def show_live_signals(dashboard, selected_market):
         st.session_state.last_scan_time = None
     
     # Manual refresh controls at the top
-    col_refresh1, col_refresh2, col_refresh3, col_refresh4 = st.columns([1, 1, 1, 1])
+    if ULTRA_FAST_AVAILABLE:
+        col_refresh1, col_refresh2, col_refresh3, col_refresh4 = st.columns([1, 1, 1, 1])
+    else:
+        col_refresh1, col_refresh2, col_refresh3 = st.columns([1, 1, 2])
     
     with col_refresh1:
         manual_refresh = st.button("🔄 Quick Scan", type="primary", help="Quick scan ~73 major stocks (30 seconds)")
     
     with col_refresh2:
-        ultra_fast_refresh = st.button("⚡ Ultra-Fast", type="secondary", help="Ultra-fast scan of 440+ stocks (2-5 minutes)")
+        if ULTRA_FAST_AVAILABLE:
+            ultra_fast_refresh = st.button("⚡ Ultra-Fast", type="secondary", help="Ultra-fast scan of 440+ stocks (2-5 minutes)")
+        else:
+            ultra_fast_refresh = False
     
     with col_refresh3:
         comprehensive_refresh = st.button("🚀 Full Scan", type="secondary", help="Comprehensive scan of 1000+ stocks (15-45 minutes)")
     
-    with col_refresh4:
-        if st.session_state.last_scan_time:
-            scan_type = st.session_state.get('last_scan_type', 'Quick')
-            st.write(f"⏰ {scan_type}: {st.session_state.last_scan_time.strftime('%H:%M:%S')}")
-        else:
-            st.write("⏰ No data loaded")
+    if ULTRA_FAST_AVAILABLE:
+        with col_refresh4:
+            if st.session_state.last_scan_time:
+                scan_type = st.session_state.get('last_scan_type', 'Quick')
+                st.write(f"⏰ {scan_type}: {st.session_state.last_scan_time.strftime('%H:%M:%S')}")
+            else:
+                st.write("⏰ No data loaded")
+    else:
+        with col_refresh3:
+            if st.session_state.last_scan_time:
+                scan_type = st.session_state.get('last_scan_type', 'Quick')
+                st.write(f"⏰ {scan_type}: {st.session_state.last_scan_time.strftime('%H:%M:%S')}")
+            else:
+                st.write("⏰ No data loaded")
 
     # Scan type selection info
     if not st.session_state.swing_data:
-        st.info("""
-        📊 **Choose Your Scan Type:**
-        
-        🔄 **Quick Scan** (~73 stocks, 30 seconds):
-        - Major US stocks (AAPL, MSFT, etc.)
-        - Top Indian stocks (RELIANCE.NS, TCS.NS, etc.)  
-        - Key Malaysian stocks (1155.KL, etc.)
-        - Best for quick market overview
-        
-        ⚡ **Ultra-Fast Scan** (~440 stocks, 2-5 minutes): **⭐ RECOMMENDED**
-        - 🇺🇸 USA: ~232 major stocks (optimized batch processing)
-        - 🇮🇳 India: ~155 NSE stocks (concurrent analysis)
-        - 🇲🇾 Malaysia: ~53 Bursa stocks (high-speed scanning)
-        - **6x more coverage in just 2-5 minutes!**
-        
-        🚀 **Full Scan** (1000+ stocks, 15-45 minutes):
-        - Deep analysis with advanced technical indicators
-        - Maximum coverage but slower processing
-        - Best for weekend comprehensive research
-        """)
+        if ULTRA_FAST_AVAILABLE:
+            st.info("""
+            📊 **Choose Your Scan Type:**
+            
+            🔄 **Quick Scan** (~73 stocks, 30 seconds):
+            - Major US stocks (AAPL, MSFT, etc.)
+            - Top Indian stocks (RELIANCE.NS, TCS.NS, etc.)  
+            - Key Malaysian stocks (1155.KL, etc.)
+            - Best for quick market overview
+            
+            ⚡ **Ultra-Fast Scan** (~440 stocks, 2-5 minutes): **⭐ RECOMMENDED**
+            - 🇺🇸 USA: ~232 major stocks (optimized batch processing)
+            - 🇮🇳 India: ~155 NSE stocks (concurrent analysis)
+            - 🇲🇾 Malaysia: ~53 Bursa stocks (high-speed scanning)
+            - **6x more coverage in just 2-5 minutes!**
+            
+            🚀 **Full Scan** (1000+ stocks, 15-45 minutes):
+            - Deep analysis with advanced technical indicators
+            - Maximum coverage but slower processing
+            - Best for weekend comprehensive research
+            """)
+        else:
+            st.info("""
+            📊 **Choose Your Scan Type:**
+            
+            🔄 **Quick Scan** (~73 stocks, 30 seconds):
+            - Major US stocks (AAPL, MSFT, etc.)
+            - Top Indian stocks (RELIANCE.NS, TCS.NS, etc.)  
+            - Key Malaysian stocks (1155.KL, etc.)
+            - Best for quick market overview
+            
+            🚀 **Full Scan** (1000+ stocks, 15-45 minutes):
+            - Deep analysis with advanced technical indicators
+            - Maximum coverage but slower processing
+            - Best for weekend comprehensive research
+            
+            ⚠️ **Ultra-Fast Scan temporarily unavailable**
+            """)
     
     # Only fetch new data if manual refresh is clicked or no data exists
     if manual_refresh or ultra_fast_refresh or comprehensive_refresh or st.session_state.swing_data is None:
         
         # Determine scan type
-        if ultra_fast_refresh:
+        if ultra_fast_refresh and ULTRA_FAST_AVAILABLE:
             scan_type = "ULTRA_FAST"
             scan_message = "⚡ Starting ultra-fast market scan of 440+ stocks..."
             warning_message = "🚀 Ultra-fast scan will complete in 2-5 minutes with optimized processing!"
+        elif ultra_fast_refresh and not ULTRA_FAST_AVAILABLE:
+            # Fallback to comprehensive if ultra-fast not available
+            scan_type = "COMPREHENSIVE"
+            scan_message = "🚀 Starting comprehensive market scan (ultra-fast not available)..."
+            warning_message = "⚠️ Ultra-fast mode unavailable, running comprehensive scan instead (15-45 minutes)"
+            st.warning(warning_message)
         elif comprehensive_refresh:
             scan_type = "COMPREHENSIVE"
             scan_message = "🚀 Starting comprehensive market scan of 1000+ stocks..."
@@ -564,7 +612,7 @@ def show_live_signals(dashboard, selected_market):
             start_time = time.time()
             
             with st.spinner(scan_message):
-                if scan_type == "ULTRA_FAST":
+                if scan_type == "ULTRA_FAST" and ULTRA_FAST_AVAILABLE:
                     from tools.enhanced_signals import get_ultra_fast_swing_signals, get_portfolio_analysis
                     
                     st.session_state.swing_data = get_ultra_fast_swing_signals(
@@ -573,14 +621,17 @@ def show_live_signals(dashboard, selected_market):
                     )
                     st.session_state.last_scan_type = "Ultra-Fast"
                     
-                else:  # COMPREHENSIVE
+                else:  # COMPREHENSIVE (or fallback from ultra-fast)
                     from tools.enhanced_signals import get_comprehensive_swing_signals, get_portfolio_analysis
                     
                     st.session_state.swing_data = get_comprehensive_swing_signals(
                         progress_callback=progress_callback, 
                         top_n=15  # Get more opportunities from comprehensive scan
                     )
-                    st.session_state.last_scan_type = "Full Scan"
+                    if scan_type == "ULTRA_FAST":
+                        st.session_state.last_scan_type = "Comprehensive (fallback)"
+                    else:
+                        st.session_state.last_scan_type = "Full Scan"
                 
                 # Get fresh portfolio analysis (not cached)
                 if st.session_state.swing_data and dashboard.portfolio:
