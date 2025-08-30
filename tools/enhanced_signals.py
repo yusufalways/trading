@@ -81,6 +81,7 @@ class EnhancedSwingAnalyzer:
                     'swing_score': max(0, min(100, score)),
                     'recommendation': recommendation,
                     'entry_type': "Swing Entry",
+                    'risk_reward': f"{2.0:.1f}:1",  # Default risk/reward ratio
                     'market_name': market_name,
                     'signals': [f"Price: ${current_price:.2f}", f"Score: {score}/100"]
                 }

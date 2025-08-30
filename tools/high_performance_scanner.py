@@ -180,6 +180,7 @@ class HighPerformanceScanner:
                 'sma_50': sma_50,
                 'price_change_5d': price_change_5d,
                 'price_change_20d': price_change_20d,
+                'risk_reward': f"{2.5:.1f}:1",  # Default risk/reward ratio
                 'signals': [
                     f"RSI: {current_rsi:.1f}",
                     f"Volume: {volume_ratio:.1f}x avg",
