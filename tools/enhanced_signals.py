@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Enhanced Daily Signals with Swing Trading Analysis
-Integrates with dashboard to show real-time swing opportunities
+Integrates advanced technical analysis with dashboard scanning
 """
 
 import yfinance as yf
@@ -14,6 +14,15 @@ import logging
 from typing import Dict, List, Optional, Tuple
 import warnings
 warnings.filterwarnings('ignore')
+
+# Import advanced analysis modules
+try:
+    from .advanced_technical_analysis import AdvancedTechnicalAnalysis
+    from .market_context_analyzer import MarketContextAnalyzer, EnhancedEntryChecklist
+    ADVANCED_ANALYSIS_AVAILABLE = True
+except ImportError:
+    print("Advanced analysis modules not available - using basic analysis")
+    ADVANCED_ANALYSIS_AVAILABLE = False
 
 class EnhancedSwingAnalyzer:
     """Enhanced analyzer for dashboard integration"""
@@ -58,7 +67,7 @@ class EnhancedSwingAnalyzer:
         }
     
     def calculate_swing_signals(self, symbol: str, period: str = "3mo") -> Optional[Dict]:
-        """Calculate comprehensive swing trading signals"""
+        """Calculate comprehensive swing trading signals with advanced analysis"""
         try:
             ticker = yf.Ticker(symbol)
             df = ticker.history(period=period, interval="1d")
@@ -105,7 +114,85 @@ class EnhancedSwingAnalyzer:
             current_macd = macd.iloc[-1]
             current_macd_signal = macd_signal.iloc[-1]
             
-            # Swing trading score calculation
+            # Initialize enhanced analysis
+            advanced_score = 0
+            enhanced_signals = []
+            
+            # Try to get advanced analysis if available
+            if ADVANCED_ANALYSIS_AVAILABLE:
+                try:
+                    advanced_analyzer = AdvancedTechnicalAnalysis(symbol)
+                    advanced_analysis = advanced_analyzer.comprehensive_entry_analysis(current_price)
+                    
+                    # Extract advanced features
+                    setup_quality = advanced_analysis.get('setup_quality_score', 0)
+                    confluence = advanced_analysis.get('timeframe_confluence', {})
+                    volume_analysis = advanced_analysis.get('volume_analysis', {})
+                    patterns = advanced_analysis.get('pattern_analysis', {})
+                    market_structure = advanced_analysis.get('market_structure', {})
+                    divergences = advanced_analysis.get('momentum_divergences', {})
+                    
+                    # Add advanced scoring
+                    advanced_score += min(setup_quality * 0.4, 40)  # Up to 40 points from setup quality
+                    
+                    # Confluence scoring
+                    confluence_score = confluence.get('confluence_score', 0)
+                    if confluence_score >= 80:
+                        advanced_score += 20
+                        enhanced_signals.append(f"Strong multi-timeframe confluence ({confluence_score}%)")
+                    elif confluence_score >= 60:
+                        advanced_score += 15
+                        enhanced_signals.append(f"Good timeframe alignment ({confluence_score}%)")
+                    elif confluence_score >= 40:
+                        advanced_score += 10
+                        enhanced_signals.append(f"Moderate timeframe alignment ({confluence_score}%)")
+                    
+                    # Volume profile analysis
+                    volume_trend = volume_analysis.get('volume_trend', 'Normal')
+                    if volume_trend == 'Above Average':
+                        advanced_score += 15
+                        enhanced_signals.append("Above average volume confirmation")
+                    elif volume_trend == 'Normal':
+                        advanced_score += 8
+                    
+                    # Pattern recognition
+                    if patterns.get('double_bottom', False):
+                        advanced_score += 20
+                        enhanced_signals.append("Double bottom pattern detected")
+                    
+                    # Market structure
+                    trend_structure = market_structure.get('trend_structure', '')
+                    if 'Uptrend' in trend_structure:
+                        advanced_score += 15
+                        enhanced_signals.append("Strong uptrend structure (HH/HL)")
+                    elif 'Sideways' in trend_structure:
+                        advanced_score += 5
+                        enhanced_signals.append("Consolidation pattern")
+                    
+                    # Divergence analysis
+                    rsi_divergence = divergences.get('rsi_divergence', '')
+                    if 'Bullish' in rsi_divergence:
+                        advanced_score += 15
+                        enhanced_signals.append("Bullish RSI divergence detected")
+                    
+                    # Store advanced analysis for detailed view
+                    advanced_data = {
+                        'setup_quality_score': setup_quality,
+                        'confluence_data': confluence,
+                        'volume_profile': volume_analysis,
+                        'pattern_analysis': patterns,
+                        'market_structure': market_structure,
+                        'divergences': divergences,
+                        'advanced_available': True
+                    }
+                    
+                except Exception as e:
+                    print(f"Advanced analysis failed for {symbol}: {e}")
+                    advanced_data = {'advanced_available': False}
+            else:
+                advanced_data = {'advanced_available': False}
+            
+            # Basic swing trading score calculation
             score = 0
             signals = []
             entry_type = "WATCH"
@@ -122,15 +209,15 @@ class EnhancedSwingAnalyzer:
                 if support_distance <= 3:  # Within 3% of support
                     score += 30
                     signals.append(f"Near support ({support_distance:.1f}%)")
-                    entry_type = "SUPPORT_BOUNCE"
+                    entry_type = "Support Bounce"
             
             if nearest_resistance:
                 resistance_distance = ((nearest_resistance - current_price) / current_price) * 100
                 if resistance_distance <= 3:  # Within 3% of resistance
                     score += 25
                     signals.append(f"Near resistance ({resistance_distance:.1f}%)")
-                    if entry_type != "SUPPORT_BOUNCE":
-                        entry_type = "RESISTANCE_BREAK"
+                    if entry_type != "Support Bounce":
+                        entry_type = "Resistance Break"
             
             # RSI signals
             if 30 <= current_rsi <= 40:
@@ -149,6 +236,117 @@ class EnhancedSwingAnalyzer:
                 signals.append("Bullish MA alignment")
             
             # MACD momentum
+            if current_macd > current_macd_signal:
+                score += 10
+                signals.append("MACD bullish")
+            
+            # Volume confirmation
+            if volume_ratio > 1.2:
+                score += 10
+                signals.append(f"High volume ({volume_ratio:.1f}x)")
+            
+            # Price position relative to MAs
+            if current_price > current_sma_20 > current_sma_50:
+                score += 10
+                signals.append("Above key MAs")
+            
+            # Add pullback entry detection
+            if current_price < current_sma_20 and current_sma_20 > current_sma_50:
+                if support_distance and support_distance <= 5:
+                    score += 15
+                    signals.append("Pullback to support in uptrend")
+                    entry_type = "Pullback Entry"
+            
+            # Combine basic and advanced scores
+            total_score = min(score + advanced_score, 100)  # Cap at 100
+            
+            # Combine signals
+            all_signals = signals + enhanced_signals
+            
+            # Enhanced recommendation based on total score
+            if total_score >= 80:
+                recommendation = "STRONG BUY"
+            elif total_score >= 65:
+                recommendation = "BUY"  
+            elif total_score >= 45:
+                recommendation = "WATCH"
+            elif total_score <= 25:
+                recommendation = "AVOID"
+            else:
+                recommendation = "HOLD"
+            
+            # Risk/reward calculation with enhanced logic
+            risk_reward = "N/A"
+            risk_reward_ratio = 0
+            if nearest_support and nearest_resistance:
+                risk = current_price - nearest_support
+                reward = nearest_resistance - current_price
+                if risk > 0:
+                    risk_reward_ratio = reward / risk
+                    risk_reward = f"{risk_reward_ratio:.1f}:1"
+                    
+                    # Penalize poor R/R ratios
+                    if risk_reward_ratio < 1.5:
+                        total_score = max(0, total_score - 20)
+                        all_signals.append(f"Poor R/R ratio ({risk_reward})")
+                    elif risk_reward_ratio >= 2.0:
+                        total_score = min(100, total_score + 10)
+                        all_signals.append(f"Excellent R/R ratio ({risk_reward})")
+            
+            # Determine market name for currency symbol
+            if '.NS' in symbol:
+                market_name = "🇮🇳 India"
+            elif '.KL' in symbol:
+                market_name = "🇲🇾 Malaysia"
+            else:
+                market_name = "🇺🇸 USA"
+            
+            # Price change
+            price_change_pct = ((current_price - close.iloc[-2]) / close.iloc[-2]) * 100 if len(close) > 1 else 0
+            
+            result = {
+                'symbol': symbol,
+                'current_price': current_price,
+                'price_change_pct': price_change_pct,
+                'swing_score': total_score,  # Now includes advanced analysis
+                'recommendation': recommendation,
+                'entry_type': entry_type,
+                'signals': all_signals,
+                'rsi': current_rsi,
+                'volume_ratio': volume_ratio,
+                'support_level': nearest_support,
+                'resistance_level': nearest_resistance,
+                'support_distance': support_distance,
+                'resistance_distance': resistance_distance,
+                'risk_reward': risk_reward,
+                'risk_reward_ratio': risk_reward_ratio,
+                'sma_20': current_sma_20,
+                'sma_50': current_sma_50,
+                'macd': current_macd,
+                'macd_signal': current_macd_signal,
+                'trend': "BULLISH" if current_sma_20 > current_sma_50 else "BEARISH",
+                'market_name': market_name,
+                
+                # Enhanced data for detailed analysis
+                'support_levels': self._get_multiple_support_levels(df, current_price),
+                'resistance_levels': self._get_multiple_resistance_levels(df, current_price),
+                'bollinger_bands': self._calculate_bollinger_bands(df['Close']),
+                'stochastic': self._calculate_stochastic(df),
+                'volume_trend': 'High' if volume_ratio > 1.5 else 'Normal' if volume_ratio > 0.8 else 'Low',
+                'macd_signal_trend': 'Bullish' if current_macd > current_macd_signal else 'Bearish',
+                'trend_strength': self._calculate_trend_strength(df['Close']),
+                'volatility': self._calculate_volatility(df['Close']),
+                'momentum': self._calculate_momentum_score(df['Close']),
+                
+                # Advanced analysis data
+                'advanced_analysis': advanced_data
+            }
+            
+            return result
+            
+        except Exception as e:
+            print(f"Error analyzing {symbol}: {e}")
+            return None
             if current_macd > current_macd_signal:
                 score += 10
                 signals.append("MACD bullish")

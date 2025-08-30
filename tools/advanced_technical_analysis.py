@@ -9,7 +9,41 @@ import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
-import talib
+
+# Try to import TA-Lib, make it optional
+try:
+    import talib
+    TALIB_AVAILABLE = True
+except ImportError:
+    TALIB_AVAILABLE = False
+    print("TA-Lib not available - using fallback implementations")
+
+def calculate_rsi_fallback(prices, window=14):
+    """Fallback RSI calculation when TA-Lib is not available"""
+    delta = prices.diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
+    rs = gain / loss
+    rsi = 100 - (100 / (1 + rs))
+    return rsi.values
+
+def calculate_macd_fallback(prices):
+    """Fallback MACD calculation when TA-Lib is not available"""
+    ema_12 = prices.ewm(span=12).mean()
+    ema_26 = prices.ewm(span=26).mean()
+    macd = ema_12 - ema_26
+    macd_signal = macd.ewm(span=9).mean()
+    macd_hist = macd - macd_signal
+    return macd.values, macd_signal.values, macd_hist.values
+
+def calculate_atr_fallback(high, low, close, window=14):
+    """Fallback ATR calculation when TA-Lib is not available"""
+    tr1 = high - low
+    tr2 = abs(high - close.shift())
+    tr3 = abs(low - close.shift())
+    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+    atr = tr.rolling(window=window).mean()
+    return atr.values
 
 class AdvancedTechnicalAnalysis:
     def __init__(self, symbol, period="1y"):
@@ -215,7 +249,10 @@ class AdvancedTechnicalAnalysis:
             trend = 'Bullish' if latest['Close'] > latest['MA20'] > latest['MA50'] else 'Bearish'
             
             # RSI
-            rsi = talib.RSI(data['Close'].values, timeperiod=14)
+            if TALIB_AVAILABLE:
+                rsi = talib.RSI(data['Close'].values, timeperiod=14)
+            else:
+                rsi = calculate_rsi_fallback(data['Close'], window=14)
             current_rsi = rsi[-1] if len(rsi) > 0 else 50
             
             confluence[tf_name] = {
@@ -329,8 +366,12 @@ class AdvancedTechnicalAnalysis:
             return {}
         
         # Calculate RSI and MACD
-        rsi = talib.RSI(self.data['Close'].values, timeperiod=14)
-        macd, macd_signal, macd_hist = talib.MACD(self.data['Close'].values)
+        if TALIB_AVAILABLE:
+            rsi = talib.RSI(self.data['Close'].values, timeperiod=14)
+            macd, macd_signal, macd_hist = talib.MACD(self.data['Close'].values)
+        else:
+            rsi = calculate_rsi_fallback(self.data['Close'], window=14)
+            macd, macd_signal, macd_hist = calculate_macd_fallback(self.data['Close'])
         
         # Find recent swing points in price and indicators
         price_swings = self.find_price_swings(self.data['Close'], 5)
@@ -398,8 +439,12 @@ class AdvancedTechnicalAnalysis:
             return {}
         
         # Calculate ATR
-        atr = talib.ATR(self.data['High'].values, self.data['Low'].values, 
-                       self.data['Close'].values, timeperiod=14)
+        if TALIB_AVAILABLE:
+            atr = talib.ATR(self.data['High'].values, self.data['Low'].values, 
+                           self.data['Close'].values, timeperiod=14)
+        else:
+            atr = calculate_atr_fallback(self.data['High'], self.data['Low'], 
+                                       self.data['Close'], window=14)
         current_atr = atr[-1] if len(atr) > 0 else 0
         
         # ATR-based stop loss
