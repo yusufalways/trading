@@ -485,8 +485,6 @@ def show_live_signals(dashboard, selected_market):
             st.write("⏰ No data loaded")
     
     with col_refresh3:
-        st.info("💡 Use 'Refresh Signals' button to update data. No auto-refresh to prevent interruptions.")
-        
         # Show recent activity
         if 'recent_trades' in st.session_state and st.session_state.recent_trades:
             with st.expander("📝 Recent Activity", expanded=False):
@@ -2135,31 +2133,6 @@ def show_portfolio(dashboard):
             st.dataframe(styled_summary, width='stretch')
     else:
         st.info("📝 No current positions. Start trading from the Live Signals tab!")
-        
-        # Show sample trade calculation
-        st.subheader("💡 Sample Trade Example")
-        st.write("**Here's how a trade would work:**")
-        
-        example_price = 100.00
-        shares = int(1000 / example_price)  # $1000 position
-        target = example_price * 1.10
-        stop = example_price * 0.95
-        
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("📊 Example Stock", f"${example_price:.2f}")
-            st.write(f"**Position Size:** {shares} shares")
-            st.write(f"**Investment:** ${shares * example_price:,.2f}")
-        
-        with col2:
-            st.metric("🎯 Target (+10%)", f"${target:.2f}")
-            st.write(f"**Potential Gain:** ${(target - example_price) * shares:.2f}")
-        
-        with col3:
-            st.metric("🛡️ Stop-Loss (-5%)", f"${stop:.2f}")
-            st.write(f"**Max Risk:** ${(example_price - stop) * shares:.2f}")
-        
-        st.info("💡 Risk/Reward Ratio: 1:2 (Risk $50 to potentially gain $100)")
 
 def show_performance(dashboard):
     """Display performance analytics"""
