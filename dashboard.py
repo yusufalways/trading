@@ -976,48 +976,66 @@ def show_live_signals(dashboard, selected_market):
                 else:
                     currency_symbol = "$"
                 
-                # Main metrics row - Mobile Responsive
-                if is_mobile():
-                    # Mobile: Stack metrics in 2x2 + 1 layout
-                    metric_row1_col1, metric_row1_col2 = st.columns(2)
-                    with metric_row1_col1:
-                        score_color = "🟢" if score >= 80 else "🟡" if score >= 60 else "🔴"
-                        st.metric("Swing Score", f"{score_color} {score}/100")
-                    with metric_row1_col2:
-                        st.metric("Current Price", f"{currency_symbol}{price:.2f}")
-                    
-                    metric_row2_col1, metric_row2_col2 = st.columns(2)
-                    with metric_row2_col1:
-                        st.metric("Market", market_name)
-                    with metric_row2_col2:
-                        signal_color = "🟢" if recommendation == "STRONG BUY" else "🟡"
-                        st.metric("Signal", f"{signal_color} {recommendation}")
-                    
-                    # Setup type in its own row
-                    st.metric("Setup Type", entry_type)
-                else:
-                    # Desktop: 5-column layout
-                    metric_col1, metric_col2, metric_col3, metric_col4, metric_col5 = st.columns(5)
-                    
-                    with metric_col1:
-                        score_color = "🟢" if score >= 80 else "🟡" if score >= 60 else "🔴"
-                        st.metric("Swing Score", f"{score_color} {score}/100")
-                    
-                    with metric_col2:
-                        st.metric("Current Price", f"{currency_symbol}{price:.2f}")
-                    
-                    with metric_col3:
-                        st.metric("Market", market_name)
-                    
-                    with metric_col4:
-                        signal_color = "🟢" if recommendation == "STRONG BUY" else "🟡"
-                        st.metric("Signal", f"{signal_color} {recommendation}")
-                    
-                    with metric_col5:
-                        st.metric("Setup Type", entry_type)
+                # Main metrics - Vertical layout for better readability
+                score_color = "🟢" if score >= 80 else "🟡" if score >= 60 else "🔴"
+                signal_color = "🟢" if recommendation == "STRONG BUY" else "🟡"
+                
+                # Display metrics vertically with reduced spacing
+                st.markdown(f"""
+                <div style="margin-bottom: -10px;">
+                    <h4 style="margin-bottom: 5px;">Swing Score</h4>
+                    <p style="font-size: 24px; margin-top: 0px; margin-bottom: 10px;">{score_color} {score}/100</p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                st.markdown(f"""
+                <div style="margin-bottom: -10px;">
+                    <h4 style="margin-bottom: 5px;">Current Price</h4>
+                    <p style="font-size: 24px; margin-top: 0px; margin-bottom: 10px;">{currency_symbol}{price:.2f}</p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                st.markdown(f"""
+                <div style="margin-bottom: -10px;">
+                    <h4 style="margin-bottom: 5px;">Market</h4>
+                    <p style="font-size: 24px; margin-top: 0px; margin-bottom: 10px;">{market_name}</p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                st.markdown(f"""
+                <div style="margin-bottom: -10px;">
+                    <h4 style="margin-bottom: 5px;">Signal</h4>
+                    <p style="font-size: 24px; margin-top: 0px; margin-bottom: 10px;">{signal_color} {recommendation}</p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                st.markdown(f"""
+                <div style="margin-bottom: 10px;">
+                    <h4 style="margin-bottom: 5px;">Setup Type</h4>
+                    <p style="font-size: 24px; margin-top: 0px; margin-bottom: 10px;">{entry_type}</p>
+                </div>
+                """, unsafe_allow_html=True)
                 
                 # Detailed analysis sections - Vertical layout for all screen sizes
                 # This provides better readability as requested
+                
+                # Add custom CSS for reduced spacing
+                st.markdown("""
+                <style>
+                .stMarkdown h3 {
+                    margin-top: 10px !important;
+                    margin-bottom: 10px !important;
+                }
+                .stMarkdown h4 {
+                    margin-top: 8px !important;
+                    margin-bottom: 8px !important;
+                }
+                .stMarkdown p {
+                    margin-top: 5px !important;
+                    margin-bottom: 5px !important;
+                }
+                </style>
+                """, unsafe_allow_html=True)
                 
                 # Section 1: Support & Resistance Analysis
                 st.markdown("### 🎯 **Support & Resistance Levels**")
@@ -1056,7 +1074,7 @@ def show_live_signals(dashboard, selected_market):
                 else:
                     st.info("🎯 In middle range - good for swing entry")
                 
-                st.markdown("---")  # Separator between sections
+                st.markdown("<hr style='margin-top: 15px; margin-bottom: 15px;'>", unsafe_allow_html=True)
                 
                 # Section 2: Technical Indicators
                 st.markdown("### 📊 **Technical Indicators**")
@@ -1170,7 +1188,7 @@ def show_live_signals(dashboard, selected_market):
                     # Risk metrics
                     st.write(f"• **Risk Level**: {'High' if volatility > 25 else 'Medium' if volatility > 15 else 'Low'}")
                 
-                st.markdown("---")  # Separator between sections
+                st.markdown("<hr style='margin-top: 15px; margin-bottom: 15px;'>", unsafe_allow_html=True)
             
             # Section 3: Trade Setup & Risk Management
             st.markdown("### 🎯 **Trade Setup & Risk Management**")
