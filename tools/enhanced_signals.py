@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Enhanced Daily Signals with Swing Trading Analysis
-Integrates advanced technical analysis with dashboard scanning
+Uses unified analysis system for consistent and reliable results
 """
 
 import yfinance as yf
@@ -15,7 +15,15 @@ from typing import Dict, List, Optional, Tuple
 import warnings
 warnings.filterwarnings('ignore')
 
-# Import advanced analysis modules
+# Import unified analysis system
+try:
+    from .unified_swing_analyzer import UnifiedSwingAnalyzer
+    UNIFIED_ANALYSIS_AVAILABLE = True
+except ImportError:
+    print("Unified analysis not available - using basic analysis")
+    UNIFIED_ANALYSIS_AVAILABLE = False
+
+# Import legacy modules for compatibility
 try:
     from .advanced_technical_analysis import AdvancedTechnicalAnalysis
     from .market_context_analyzer import MarketContextAnalyzer, EnhancedEntryChecklist
@@ -25,48 +33,165 @@ except ImportError:
     ADVANCED_ANALYSIS_AVAILABLE = False
 
 class EnhancedSwingAnalyzer:
-    """Enhanced analyzer for dashboard integration"""
+    """Enhanced analyzer using unified analysis system"""
     
     def __init__(self):
         self.lookback_period = 50
-        
-    def calculate_support_resistance(self, df: pd.DataFrame) -> Dict:
-        """Calculate dynamic support and resistance levels"""
-        if len(df) < 20:
-            return {'current_price': df['Close'].iloc[-1], 'nearest_resistance': None, 'nearest_support': None}
-            
-        current_price = df['Close'].iloc[-1]
-        
-        # Rolling highs and lows for pivot detection
-        window = min(20, len(df) // 3)
-        
-        # Find pivot highs (resistance)
-        highs = df['High'].rolling(window=5, center=True).max()
-        resistance_candidates = []
-        
-        for i in range(5, len(df) - 5):
-            if df['High'].iloc[i] == highs.iloc[i] and df['High'].iloc[i] > current_price:
-                resistance_candidates.append(df['High'].iloc[i])
-        
-        # Find pivot lows (support)
-        lows = df['Low'].rolling(window=5, center=True).min()
-        support_candidates = []
-        
-        for i in range(5, len(df) - 5):
-            if df['Low'].iloc[i] == lows.iloc[i] and df['Low'].iloc[i] < current_price:
-                support_candidates.append(df['Low'].iloc[i])
-        
-        # Get nearest levels
-        nearest_resistance = min(resistance_candidates) if resistance_candidates else None
-        nearest_support = max(support_candidates) if support_candidates else None
-        
-        return {
-            'current_price': current_price,
-            'nearest_resistance': nearest_resistance,
-            'nearest_support': nearest_support
-        }
+        if UNIFIED_ANALYSIS_AVAILABLE:
+            self.unified_analyzer = UnifiedSwingAnalyzer()
+            print("✅ Using unified analysis system for consistent results")
+        else:
+            print("⚠️ Unified analysis not available - using legacy system")
     
     def calculate_swing_signals(self, symbol: str, period: str = "3mo") -> Optional[Dict]:
+        """Calculate comprehensive swing trading signals using unified analysis"""
+        
+        # Use unified analyzer if available
+        if UNIFIED_ANALYSIS_AVAILABLE:
+            return self._unified_analysis(symbol, period)
+        else:
+            return self._legacy_analysis(symbol, period)
+    
+    def _unified_analysis(self, symbol: str, period: str = "3mo") -> Optional[Dict]:
+        """Use unified analysis system for consistent results"""
+        try:
+            result = self.unified_analyzer.comprehensive_analysis(symbol, period)
+            
+            if not result:
+                return None
+            
+            # Convert to dashboard-compatible format
+            return self._convert_unified_to_dashboard_format(result)
+            
+        except Exception as e:
+            print(f"Unified analysis failed for {symbol}: {e}")
+            return self._legacy_analysis(symbol, period)
+    
+    def _convert_unified_to_dashboard_format(self, unified_result: Dict) -> Dict:
+        """Convert unified analysis result to dashboard-compatible format"""
+        
+        # Extract data from unified result
+        tech_analysis = unified_result.get('technical_analysis', {})
+        risk_analysis = unified_result.get('risk_analysis', {})
+        
+        converted = {
+            'symbol': unified_result['symbol'],
+            'current_price': unified_result['current_price'],
+            'swing_score': unified_result['total_score'],
+            'recommendation': unified_result['recommendation'],
+            'entry_type': unified_result['opportunity_type'],
+            'signals': unified_result['entry_rationale'] + unified_result['risk_factors'],
+            'market_name': unified_result['market_name'],
+            
+            # Technical details
+            'rsi': tech_analysis.get('rsi', 0),
+            'volume_ratio': tech_analysis.get('volume_ratio', 1),
+            'support_level': tech_analysis.get('support_level'),
+            'resistance_level': tech_analysis.get('resistance_level'),
+            'support_distance': tech_analysis.get('support_distance'),
+            'resistance_distance': tech_analysis.get('resistance_distance'),
+            'risk_reward': f"{risk_analysis.get('risk_reward_ratio', 0):.1f}:1",
+            'risk_reward_ratio': risk_analysis.get('risk_reward_ratio', 0),
+            
+            # Moving averages
+            'sma_20': tech_analysis.get('sma_20'),
+            'sma_50': tech_analysis.get('sma_50'),
+            'trend': "BULLISH" if tech_analysis.get('sma_20', 0) > tech_analysis.get('sma_50', 0) else "BEARISH",
+            
+            # Additional dashboard compatibility
+            'price_change_pct': unified_result.get('price_change_pct', 0),
+            'macd': 0,  # Not used in unified system
+            'macd_signal': 0,  # Not used in unified system
+            'volume_trend': 'High' if tech_analysis.get('volume_ratio', 1) > 1.5 else 'Normal',
+            'macd_signal_trend': 'Neutral',
+            'trend_strength': 0,
+            'volatility': risk_analysis.get('volatility', 20),
+            'momentum': 0,
+            
+            # Enhanced dashboard data
+            'support_levels': self._extract_support_levels(tech_analysis),
+            'resistance_levels': self._extract_resistance_levels(tech_analysis),
+            'bollinger_bands': {'upper': 0, 'middle': 0, 'lower': 0},
+            'stochastic': {'k': 0, 'd': 0},
+            
+            # Advanced analysis data (unified system)
+            'advanced_analysis': {
+                'advanced_available': True,
+                'unified_analysis': unified_result,
+                'setup_quality_score': unified_result.get('advanced_score', 0) * 100/30,  # Convert to 100-point scale
+                'confidence_level': unified_result['confidence'],
+                'recommendation_rationale': unified_result['entry_rationale']
+            }
+        }
+        
+        return converted
+    
+    def _extract_support_levels(self, tech_analysis: Dict) -> Dict:
+        """Extract support levels for dashboard display"""
+        support_level = tech_analysis.get('support_level')
+        if not support_level:
+            return {'strong': [], 'medium': [], 'weak': []}
+        
+        return {
+            'strong': [support_level],
+            'medium': [support_level * 0.98],  # Approximate additional level
+            'weak': [support_level * 0.96]
+        }
+    
+    def _extract_resistance_levels(self, tech_analysis: Dict) -> Dict:
+        """Extract resistance levels for dashboard display"""
+        resistance_level = tech_analysis.get('resistance_level')
+        if not resistance_level:
+            return {'strong': [], 'medium': [], 'weak': []}
+        
+        return {
+            'strong': [resistance_level],
+            'medium': [resistance_level * 1.02],  # Approximate additional level
+            'weak': [resistance_level * 1.04]
+        }
+    
+    def _legacy_analysis(self, symbol: str, period: str = "3mo") -> Optional[Dict]:
+        """Legacy analysis system (fallback)"""
+        try:
+            ticker = yf.Ticker(symbol)
+            df = ticker.history(period=period, interval="1d")
+            
+            if df.empty or len(df) < 30:
+                return None
+            
+            # Simplified legacy analysis
+            current_price = df['Close'].iloc[-1]
+            
+            return {
+                'symbol': symbol,
+                'current_price': current_price,
+                'swing_score': 50,  # Neutral score
+                'recommendation': 'WATCH',
+                'entry_type': 'BASIC',
+                'signals': ['Legacy analysis - unified system unavailable'],
+                'market_name': self._get_market_name(symbol),
+                'rsi': 50,
+                'volume_ratio': 1,
+                'support_level': None,
+                'resistance_level': None,
+                'risk_reward': 'N/A',
+                'risk_reward_ratio': 0,
+                'trend': 'NEUTRAL'
+            }
+        except Exception as e:
+            print(f"Legacy analysis failed for {symbol}: {e}")
+            return None
+    
+    def _get_market_name(self, symbol: str) -> str:
+        """Determine market name from symbol"""
+        if '.NS' in symbol:
+            return "🇮🇳 India"
+        elif '.KL' in symbol:
+            return "🇲🇾 Malaysia"
+        else:
+            return "🇺🇸 USA"
+        
+    def calculate_support_resistance(self, df: pd.DataFrame) -> Dict:
         """Calculate comprehensive swing trading signals with advanced analysis"""
         try:
             ticker = yf.Ticker(symbol)
@@ -636,17 +761,34 @@ class EnhancedSwingAnalyzer:
         return position_analysis
     
     def scan_top_opportunities(self, symbols: List[str], market_name: str, limit: int = 5) -> List[Dict]:
-        """Scan for top swing opportunities in a market"""
-        opportunities = []
-        
-        for symbol in symbols:
-            analysis = self.calculate_swing_signals(symbol)
-            if analysis and analysis['swing_score'] >= 70:  # Enhanced threshold for quality setups
-                opportunities.append(analysis)
-        
-        # Sort by swing score and return top N
-        opportunities.sort(key=lambda x: x['swing_score'], reverse=True)
-        return opportunities[:limit]
+        """Scan for top swing opportunities using unified analysis"""
+        if UNIFIED_ANALYSIS_AVAILABLE:
+            print(f"🔍 Scanning {len(symbols)} stocks in {market_name} using unified analysis...")
+            
+            # Use unified analyzer for better results
+            unified_results = self.unified_analyzer.scan_market_opportunities(symbols, market_name, limit)
+            
+            # Convert to dashboard format
+            dashboard_results = []
+            for result in unified_results:
+                converted = self._convert_unified_to_dashboard_format(result)
+                if converted:
+                    dashboard_results.append(converted)
+            
+            print(f"✅ Found {len(dashboard_results)} high-quality opportunities in {market_name}")
+            return dashboard_results
+        else:
+            # Fallback to basic scanning
+            print(f"⚠️ Using basic scanning for {market_name} (unified analysis unavailable)")
+            opportunities = []
+            
+            for symbol in symbols:
+                analysis = self.calculate_swing_signals(symbol)
+                if analysis and analysis['swing_score'] >= 70:
+                    opportunities.append(analysis)
+            
+            opportunities.sort(key=lambda x: x['swing_score'], reverse=True)
+            return opportunities[:limit]
 
 def get_market_watchlists() -> Dict[str, List[str]]:
     """Get optimized watchlists for daily scanning"""
