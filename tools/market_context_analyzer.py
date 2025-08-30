@@ -621,3 +621,88 @@ class EnhancedEntryChecklist:
                 'position_size': 'No position',
                 'rationale': 'Poor setup quality, avoid entry'
             }
+
+
+class EnhancedMarketContextAnalyzer(MarketContextAnalyzer):
+    """Enhanced version of MarketContextAnalyzer with additional features"""
+    
+    def __init__(self):
+        super().__init__()
+        self.market_regimes = ['Bull Market', 'Bear Market', 'Sideways Market']
+    
+    def get_market_context(self, symbol: str) -> Dict:
+        """Get comprehensive market context for a symbol"""
+        try:
+            # Get basic market context
+            context = self.analyze_market_context(symbol)
+            
+            # Add market regime detection
+            regime = self._detect_market_regime()
+            context['market_regime'] = regime
+            
+            # Add sector rotation analysis
+            sector_rotation = self.analyze_sector_performance()
+            context['sector_rotation'] = sector_rotation
+            
+            # Calculate overall context score
+            context_score = self._calculate_context_score(context)
+            context['context_score'] = context_score
+            
+            return context
+            
+        except Exception as e:
+            print(f"Error getting market context for {symbol}: {e}")
+            return {
+                'market_regime': 'Unknown',
+                'sector_rotation': {},
+                'context_score': 50,
+                'error': str(e)
+            }
+    
+    def _detect_market_regime(self) -> str:
+        """Detect current market regime"""
+        try:
+            # Simple regime detection based on S&P 500
+            spy = yf.Ticker("SPY")
+            data = spy.history(period="3mo")
+            
+            if len(data) < 20:
+                return "Unknown"
+            
+            # Calculate trend
+            sma_20 = data['Close'].rolling(20).mean()
+            sma_50 = data['Close'].rolling(50).mean() if len(data) >= 50 else sma_20
+            
+            current_price = data['Close'].iloc[-1]
+            
+            if current_price > sma_20.iloc[-1] > sma_50.iloc[-1]:
+                return "Bull Market"
+            elif current_price < sma_20.iloc[-1] < sma_50.iloc[-1]:
+                return "Bear Market"
+            else:
+                return "Sideways Market"
+                
+        except Exception:
+            return "Unknown"
+    
+    def _calculate_context_score(self, context: Dict) -> float:
+        """Calculate overall market context score"""
+        score = 50  # Base score
+        
+        # Market regime impact
+        regime = context.get('market_regime', 'Unknown')
+        if regime == 'Bull Market':
+            score += 20
+        elif regime == 'Bear Market':
+            score -= 20
+        
+        # Sector rotation impact
+        sector_data = context.get('sector_rotation', {})
+        if sector_data:
+            avg_performance = np.mean([perf for perf in sector_data.values() if isinstance(perf, (int, float))])
+            if avg_performance > 2:
+                score += 15
+            elif avg_performance < -2:
+                score -= 15
+        
+        return max(0, min(100, score))

@@ -30,27 +30,21 @@ TRADING_CONFIG = {
 }
 
 from tools.portfolio_manager import PaperTradingPortfolio
-from tools.technical_analysis import TechnicalAnalyzer
 
-# Import basic enhanced signals
-from tools.enhanced_signals import get_daily_swing_signals, get_market_watchlists, get_comprehensive_swing_signals
+# ✅ USING MASTER SWING ANALYZER - THE ONE AND ONLY ANALYSIS SYSTEM
+from tools.master_swing_analyzer import MasterSwingAnalyzer, get_daily_swing_signals
+from tools.market_stock_lists import get_comprehensive_market_watchlists
 
-# Import ultra-fast scanner with fallback
-try:
-    from tools.enhanced_signals import get_ultra_fast_swing_signals
-    ULTRA_FAST_AVAILABLE = True
-except ImportError as e:
-    print(f"⚠️ Ultra-fast scanner not available: {e}")
-    ULTRA_FAST_AVAILABLE = False
+# Master analyzer is the only analysis system needed
+MASTER_ANALYZER = MasterSwingAnalyzer()
 
-# Import advanced analysis modules
-try:
-    from tools.advanced_technical_analysis import AdvancedTechnicalAnalysis
-    from tools.market_context_analyzer import MarketContextAnalyzer, EnhancedEntryChecklist
-    ADVANCED_ANALYSIS_AVAILABLE = True
-except ImportError as e:
-    print(f"Advanced analysis modules not available: {e}")
-    ADVANCED_ANALYSIS_AVAILABLE = False
+def get_daily_swing_signals_with_progress(progress_callback=None):
+    """Compatibility wrapper for the dashboard"""
+    return get_daily_swing_signals(progress_callback)
+
+# Compatibility flags
+ULTRA_FAST_AVAILABLE = True  # Master analyzer handles all scanning
+ADVANCED_ANALYSIS_AVAILABLE = True  # Master analyzer has advanced features
 
 # Helper functions for responsive design
 def is_mobile():
@@ -225,7 +219,8 @@ st.markdown("""
 
 class TradingDashboard:
     def __init__(self):
-        self.analyzer = TechnicalAnalyzer()
+        # ✅ Using master analyzer - the one and only analysis system
+        self.analyzer = MASTER_ANALYZER
         self.portfolio = PaperTradingPortfolio(initial_capital=TRADING_CONFIG['initial_capital'])
         
     def get_stock_analysis(self, symbol, period="6mo"):
@@ -430,15 +425,15 @@ def get_market_signals(market_filter):
     dashboard = TradingDashboard()
     
     if market_filter == "All Markets":
-        markets = get_market_watchlists()
+        markets = get_comprehensive_market_watchlists()
     elif market_filter == "🇺🇸 USA":
-        watchlists = get_market_watchlists()
+        watchlists = get_comprehensive_market_watchlists()
         markets = {"usa": watchlists["usa"]}
     elif market_filter == "🇮🇳 India":
-        watchlists = get_market_watchlists()
+        watchlists = get_comprehensive_market_watchlists()
         markets = {"india": watchlists["india"]}
     elif market_filter == "🇲🇾 Malaysia":
-        watchlists = get_market_watchlists()
+        watchlists = get_comprehensive_market_watchlists()
         markets = {"malaysia": watchlists["malaysia"]}
 
     all_signals = []
@@ -613,20 +608,20 @@ def show_live_signals(dashboard, selected_market):
             
             with st.spinner(scan_message):
                 if scan_type == "ULTRA_FAST" and ULTRA_FAST_AVAILABLE:
-                    from tools.enhanced_signals import get_ultra_fast_swing_signals, get_portfolio_analysis
+                    # ✅ USING MASTER SWING ANALYZER - COMPLIANCE WITH AI_RULES.md
+                    from tools.master_swing_analyzer import get_daily_swing_signals, get_portfolio_analysis
                     
-                    st.session_state.swing_data = get_ultra_fast_swing_signals(
-                        progress_callback=progress_callback, 
-                        top_n=15  # Get more opportunities from ultra-fast scan
+                    st.session_state.swing_data = get_daily_swing_signals(
+                        progress_callback=progress_callback
                     )
                     st.session_state.last_scan_type = "Ultra-Fast"
                     
                 else:  # COMPREHENSIVE (or fallback from ultra-fast)
-                    from tools.enhanced_signals import get_comprehensive_swing_signals, get_portfolio_analysis
+                    # ✅ USING MASTER SWING ANALYZER - COMPLIANCE WITH AI_RULES.md
+                    from tools.master_swing_analyzer import get_daily_swing_signals, get_portfolio_analysis
                     
-                    st.session_state.swing_data = get_comprehensive_swing_signals(
-                        progress_callback=progress_callback, 
-                        top_n=15  # Get more opportunities from comprehensive scan
+                    st.session_state.swing_data = get_daily_swing_signals(
+                        progress_callback=progress_callback
                     )
                     if scan_type == "ULTRA_FAST":
                         st.session_state.last_scan_type = "Comprehensive (fallback)"
@@ -654,7 +649,8 @@ def show_live_signals(dashboard, selected_market):
         else:
             # Quick scan
             with st.spinner(scan_message):
-                from tools.enhanced_signals import get_daily_swing_signals, get_portfolio_analysis
+                # ✅ USING MASTER SWING ANALYZER - COMPLIANCE WITH AI_RULES.md
+                from tools.master_swing_analyzer import get_daily_swing_signals, get_portfolio_analysis
                 
                 # Get cached market data
                 st.session_state.swing_data = get_daily_swing_signals()
@@ -877,7 +873,7 @@ def show_live_signals(dashboard, selected_market):
                             score = opp['swing_score']
                             recommendation = opp['recommendation']
                             entry_type = opp['entry_type']
-                            risk_reward = opp['risk_reward']
+                            risk_reward = opp['risk_management']['risk_reward_ratio']
                             
                             # Format price
                             if '.NS' in symbol:
@@ -921,7 +917,7 @@ def show_live_signals(dashboard, selected_market):
                             score = opp['swing_score']
                             recommendation = opp['recommendation']
                             entry_type = opp['entry_type']
-                            risk_reward = opp['risk_reward']
+                            risk_reward = opp['risk_management']['risk_reward_ratio']
                             
                             # Format price
                             if '.NS' in symbol:
